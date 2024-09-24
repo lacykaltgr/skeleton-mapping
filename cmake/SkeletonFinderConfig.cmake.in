@@ -1,0 +1,11 @@
+set(SkeletonFinder_VERSION 1.2.3)
+
+@PACKAGE_INIT@
+
+#set_and_check(SkeletonFinder_INCLUDE_DIR "@PACKAGE_INCLUDE_INSTALL_DIR@")
+
+check_required_components(
+    yaml-cpp
+    PCL
+    Eigen
+)
