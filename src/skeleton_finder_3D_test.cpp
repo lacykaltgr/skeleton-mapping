@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
   }
 
   YAML::Node config = YAML::LoadFile(config_file_name);
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
 
   pcl::PCDReader reader;
   reader.read(filename, *cloud);
@@ -38,10 +38,10 @@ int main(int argc, char **argv) {
 
   SkeletonFinder skeleton_finder_3D(config);
 
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::copyPointCloud(*cloud, *cloud_xyz);
 
-  skeleton_finder_3D.run_processing(*cloud_xyz);
+  skeleton_finder_3D.run_processing(cloud_xyz);
 
   double path_start_x = config["path_start"]["x"].as<double>();
   double path_start_y = config["path_start"]["y"].as<double>();

@@ -8,7 +8,6 @@
 
 #include "SkeletonFinder/quickhull/QuickHull.hpp"
 #include "SkeletonFinder/A_star.h"
-#include "SkeletonFinder/kdtree.h"
 
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
@@ -31,19 +30,6 @@ class SkeletonFinder {
   pcl::search::KdTree<pcl::PointXYZ> kdtreeForVisMap;
   pcl::search::KdTree<pcl::PointXYZ> kdtreeForTestMap;
   pcl::search::KdTree<pcl::PointXYZ> kdtreeForNodes;
-
-  // Map used in the main search process,
-  // including obstacles, bounding box(optional), polyhedron facets
-  pcl::PointCloud<pcl::PointXYZ> map_pcl;
-  // Map used in closing loops,
-  // including obstacles, bounding box
-  pcl::PointCloud<pcl::PointXYZ> raw_map_pcl;
-  // Map used in visualization,
-  // including obstacles, excluding bounding box
-  pcl::PointCloud<pcl::PointXYZ> vis_map_pcl;
-
-  kdtree *kdTree_;  // dynamic light-weight Kd-tree, for organizing the nodes in
-                    // the skeleton
 
   a_star::AStar path_finder;
 
@@ -221,9 +207,9 @@ class SkeletonFinder {
   FrontierPtr findFlowBackFrontier(Eigen::Vector3d hit_on_pcl, int index);
   FacetPtr findFlowBackFacet(Eigen::Vector3d pos, int index);
   bool checkWithinBbx(Eigen::Vector3d pos);
-  void addBbxToMap(pcl::PointCloud<pcl::PointXYZ> &map);
+  void addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map);
 
-  void run_processing(const pcl::PointCloud<pcl::PointXYZ>& pointcloud_map);  // Changed parameter type
+  void run_processing(const pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud_map);  // Changed parameter type
   vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);
 
