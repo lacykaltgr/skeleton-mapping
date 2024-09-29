@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libSkeletonFinder.a CMakeFiles/SkeletonFinder.dir/src/skeleton_finder_3D_test.cpp.o CMakeFiles/SkeletonFinder.dir/src/skeleton_finder_3D.cpp.o CMakeFiles/SkeletonFinder.dir/src/io.cpp.o CMakeFiles/SkeletonFinder.dir/utils/quickhull/QuickHull.cpp.o CMakeFiles/SkeletonFinder.dir/utils/A_star/A_star.cpp.o
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libSkeletonFinder.a

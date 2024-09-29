@@ -1,0 +1,11 @@
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/omni2colmap.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/dense_recon.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/ctreep_test.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/skeleton_finder_3D_test.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/SkeletonFinder.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/edit_cache.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/rebuild_cache.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/list_install_components.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/install.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/install/local.dir
+/Users/czimbermark/Documents/TDK/pointclouds/build/CMakeFiles/install/strip.dir
