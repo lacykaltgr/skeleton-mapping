@@ -13,6 +13,7 @@ find_package(PCL REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(jsoncpp REQUIRED)
 #find_package(Torch REQUIRED)
 #find_package(CUDA REQUIRED)
 
@@ -44,6 +45,11 @@ add_executable(dense_recon
     utils/dense_reconstruction.cpp
 )
 
+# Dense reconstruction
+add_executable(ctreep_test
+    utils/CTreeP_test.cpp
+)
+
 target_link_libraries(dense_recon
     ${PCL_LIBRARIES}
     ${OpenCV_LIBS}
@@ -62,6 +68,11 @@ add_executable(skeleton_finder_3D_test
 target_link_libraries(skeleton_finder_3D_test
     ${PCL_LIBRARIES}
     yaml-cpp
+)
+
+target_link_libraries(ctreep_test
+    ${PCL_LIBRARIES}
+    jsoncpp
 )
 
 #add_executable(dense_recon_parallel

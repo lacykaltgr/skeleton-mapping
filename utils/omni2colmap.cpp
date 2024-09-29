@@ -6,7 +6,11 @@
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+#if defined(__APPLE__) && __cplusplus < 201703L
+namespace fs = std::__fs::filesystem;
+#else
 namespace fs = std::filesystem;
+#endif
 
 struct Camera {
     int width;
