@@ -17,7 +17,7 @@ void SkeletonFinder::saveToFile(const std::string& filename, const std::string& 
 
 void SkeletonFinder::visualization() {
     //visStart();
-    //visNodesAndVertices();
+    visNodesAndVertices();
     //visPolygons();
     //visFrontiers();
     //visMap();
@@ -64,6 +64,7 @@ void SkeletonFinder::visNodesAndVertices() {
     nodes_pcl.width = num_points;
     cout << "num points: " << num_points << endl;
 
+    /*
     std::cout << "Points:" << std::endl;
     for (const auto& point : nodes_pcl.points) {
         std::cout << point.x << " " << point.y << " " << point.z << std::endl;
@@ -83,12 +84,14 @@ void SkeletonFinder::visNodesAndVertices() {
     for (const auto& point : grey_vertices_pcl.points) {
         std::cout << point.x << " " << point.y << " " << point.z << std::endl;
     }
+    */
 
-    pcl::io::savePCDFileASCII("nodes.pcd", nodes_pcl);
+    pcl::io::savePCDFileASCII("/workspace/ros2_ws/src/global_planner/resource/nodes.pcd", nodes_pcl);
     
     //pcl::io::savePCDFileASCII("black_vertices.pcd", black_vertices_pcl);
     //pcl::io::savePCDFileASCII("white_vertices.pcd", white_vertices_pcl);
     //pcl::io::savePCDFileASCII("grey_vertices.pcd", grey_vertices_pcl);
+    
 }
 
 void SkeletonFinder::visMap() {

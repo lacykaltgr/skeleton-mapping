@@ -75,7 +75,6 @@ struct Facet {
 
   Facet(vector<VertexPtr> vertices_, NodePtr master_node_) {
 
-    cout << "facet found" << endl;
     vertices = vertices_;
     master_node = master_node_;
 
@@ -146,7 +145,6 @@ struct Frontier {
 
   Frontier(vector<FacetPtr> facets_, NodePtr master_node_) {
 
-    cout << "frontier found" << endl;
     facets = facets_;
     master_node = master_node_;
 

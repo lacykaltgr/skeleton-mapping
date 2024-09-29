@@ -57,7 +57,6 @@ add_executable(skeleton_finder_3D_test
     src/io.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
-    utils/kdtree/kdtree.c
 )
 
 target_link_libraries(skeleton_finder_3D_test
@@ -84,7 +83,6 @@ add_library(SkeletonFinder
     src/io.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
-    utils/kdtree/kdtree.c
 )
 
 target_link_libraries(SkeletonFinder
