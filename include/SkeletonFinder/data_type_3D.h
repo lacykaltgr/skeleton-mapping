@@ -21,6 +21,13 @@ typedef Node *NodePtr;
 typedef quickhull::Vector3<double> vec3;
 enum vertex_type { WHITE, BLACK, GREY };
 
+
+struct NodeNearestNeighbors {
+  int index;
+  Eigen::Vector3d coord;
+  vector<int> nearest_nodes;
+}
+
 struct Vertex {
   Eigen::Vector3d coord;
   Eigen::Vector3d dire_unit_sphere;

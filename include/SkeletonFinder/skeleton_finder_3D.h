@@ -27,8 +27,6 @@ class SkeletonFinder {
  private:
   vector<shared_ptr<pcl::search::KdTree<pcl::PointXYZ>>> kdtreesForPolys;
   pcl::search::KdTree<pcl::PointXYZ> kdtreeForRawMap;
-  pcl::search::KdTree<pcl::PointXYZ> kdtreeForVisMap;
-  pcl::search::KdTree<pcl::PointXYZ> kdtreeForTestMap;
   pcl::search::KdTree<pcl::PointXYZ> kdtreeForNodes;
 
   a_star::AStar path_finder;
@@ -41,22 +39,12 @@ class SkeletonFinder {
   vector<Eigen::Vector3d> sample_directions;
   vector<vector<Eigen::Vector3d>> bw_facets_directions;
 
-  vector<int> pointIdxRadiusSearch;
-  vector<float> pointRadiusSquaredDistance;
   vector<int> pointIdxRadiusSearchForRawMap;
   vector<float> pointRadiusSquaredDistanceForRawMap;
-  vector<int> pointIdxRadiusSearchForVisMap;
-  vector<float> pointRadiusSquaredDistanceForVisMap;
   vector<int> pointIdxRadiusSearchForNodes;
   vector<float> pointRadiusSquaredDistanceForNodes;
 
-  Eigen::MatrixXd Path;
-  Eigen::VectorXd Radius;
-
-  pcl::PointCloud<pcl::PointXYZ> nodes_pcl, black_vertices_pcl, white_vertices_pcl,
-      grey_vertices_pcl;
-
-  bool callback_executed = false;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr nodes_pcl;
 
   /* ------------------------ Param ----------------------- */
   // Map representation
@@ -212,6 +200,7 @@ class SkeletonFinder {
   void run_processing(const pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud_map);  // Changed parameter type
   vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);
+  vector<NodeNearestNeighbors> run_nearestnodes();
 
   /* operations on the tree */
   void recordNode(NodePtr new_node);
@@ -239,9 +228,6 @@ class SkeletonFinder {
     pending_frontiers.pop_front();
     return curFrontierPtr;
   };
-
-  /* data return */
-  pair<Eigen::MatrixXd, Eigen::VectorXd> getPath() { return make_pair(Path, Radius); };
 
   /* -------------------- visualization ------------------- */
   void visualization();

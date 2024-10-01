@@ -21,6 +21,11 @@ double AStar::pathLength(const vector<Eigen::Vector3d>& path) {
 }
 
 void AStar::init(vector<NodePtr> nodes) {
+  if (!node_pool.empty()) {
+    node_pool.clear();
+    path_nodes.clear();
+  }
+
   tie_breaker_ = 1.0 + 1.0 / 1000;
   for (NodePtr node : nodes) {
     node_pool.push_back(node);
@@ -42,6 +47,7 @@ int AStar::search(const Eigen::Vector3d& start_pt, const Eigen::Vector3d& end_pt
   NodePtr start = getNodeFromPos(start_pt);
   start->g_score = 0;
   start->f_score = getEuclHeu(start_pt, end_pt);
+  std::priority_queue<NodePtr, std::vector<NodePtr>, NodeComparator> queue;
   queue.push(start);
 
   NodePtr cur_node;

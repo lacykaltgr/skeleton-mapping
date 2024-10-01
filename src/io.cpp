@@ -21,15 +21,16 @@ void SkeletonFinder::visualization() {
     //visPolygons();
     //visFrontiers();
     //visMap();
-    //visConnections();
+    visConnections();
 }
 
 void SkeletonFinder::visNodesAndVertices() {
     // nodes_pcl.clear();
-    black_vertices_pcl.clear();
-    white_vertices_pcl.clear();
-    grey_vertices_pcl.clear();
-
+    //black_vertices_pcl.clear();
+    //white_vertices_pcl.clear();
+    //grey_vertices_pcl.clear();
+    
+    /*
     int num_nodes = NodeList.size();
     for (int i = num_nodes - 1; i >= 0; i--) {
         if (NodeList.at(i)->rollbacked)
@@ -57,11 +58,12 @@ void SkeletonFinder::visNodesAndVertices() {
         if (!_visualize_all)
             break;
     }
+    */
 
     // Save point clouds to PCD files
-    size_t num_points = nodes_pcl.size();
-    nodes_pcl.height = 1;
-    nodes_pcl.width = num_points;
+    size_t num_points = nodes_pcl->size();
+    nodes_pcl->height = 1;
+    nodes_pcl->width = num_points;
     cout << "num points: " << num_points << endl;
 
     /*
@@ -86,7 +88,7 @@ void SkeletonFinder::visNodesAndVertices() {
     }
     */
 
-    pcl::io::savePCDFileASCII("/workspace/ros2_ws/src/global_planner/resource/nodes.pcd", nodes_pcl);
+    pcl::io::savePCDFileASCII("/workspace/ros2_ws/src/global_planner/resource/nodes.pcd", (*nodes_pcl));
     
     //pcl::io::savePCDFileASCII("black_vertices.pcd", black_vertices_pcl);
     //pcl::io::savePCDFileASCII("white_vertices.pcd", white_vertices_pcl);
@@ -126,7 +128,7 @@ void SkeletonFinder::visConnections() {
         // filestream for saving connections
 
         std::fstream fs;
-        fs.open("connections.txt", std::fstream::in | std::fstream::out | std::fstream::app);
+        fs.open("/workspace/ros2_ws/src/global_planner/resource/connections.txt", std::fstream::in | std::fstream::out | std::fstream::app);
         for (int j = 0; j < num_connect_nodes; j++) {
             NodePtr connect_node = cur_node->connected_Node_ptr.at(j);
 

@@ -143,8 +143,8 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
     if (getDis(node->original_coord, search_Pt) > _max_ray_length + min_dis)
       continue;
 
-    pointIdxRadiusSearch.clear();
-    pointRadiusSquaredDistance.clear();
+    pointIdxRadiusSearchForRawMap.clear();
+    pointRadiusSquaredDistanceForRawMap.clear();
 
     kdtreesForPolys.at(node->index)
         ->nearestKSearch(searchPoint, 1, pointIdxRadiusSearchForRawMap,
@@ -194,7 +194,7 @@ bool SkeletonFinder::collisionCheck(Vector3d search_pt, double threshold) {
 }
 void SkeletonFinder::recordNode(NodePtr new_node) {
   NodeList.push_back(new_node);
-  nodes_pcl.points.push_back(pcl::PointXYZ(
+  nodes_pcl->points.push_back(pcl::PointXYZ(
       new_node->coord(0), new_node->coord(1), new_node->coord(2)));
 
   if (!new_node->isGate) {
@@ -219,10 +219,6 @@ void SkeletonFinder::treeDestruct() {
 
 void SkeletonFinder::run_processing(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr raw_map_pcl) {
-  if (callback_executed)
-    return;
-
-  callback_executed = true;
 
   if (raw_map_pcl->points.size() == 0) {
     cout << "Map pointcloud is empty!" << endl;
@@ -234,18 +230,15 @@ void SkeletonFinder::run_processing(
       continue;
   }
 
-  cout << "Map successfully loaded..." << endl;
-
+  //TODO: addBbxToMap
   //addBbxToMap(raw_map_pcl);
-
-  cout << "Added bounding box" << endl;
 
   // Point cloud map
   if (_map_representation == 0) {
     kdtreeForRawMap.setInputCloud(raw_map_pcl);
   }
 
-  cout << "KD tree..." << endl;
+  nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
 
   Eigen::Vector3d start;
   start << _start_x, _start_y, _start_z;
@@ -282,6 +275,36 @@ vector<Eigen::Vector3d> SkeletonFinder::run_findpath(
     cout << "Path length: " << path_length << endl;
   }
   return path;
+}
+
+
+vector<NodeNearestNeighbors> SkeletonFinder::run_nearestnodes() {
+  vector<NodeNearestNeighbors> nearest_nodes;
+  // TODO: should we use center_NodeList (exclude gates)
+  int counter = 0;
+  kdtreeForNodes.setInputCloud(nodes_pcl);
+  for (NodePtr node: NodeList) {
+    NodeNearestNeighbors nearest_node;
+    nearest_node.index = counter++;
+    nearest_node.coord = node->coord;
+    nearest_node.nearest_nodes = findNearestNodes(node);
+    nearest_nodes.push_back(nearest_node);
+  }
+  return nearest_nodes;
+}
+
+vector<int> SkeletonFinder::findNearestNodes(NodePtr node) {
+  vector<int> nearest_nodes;
+  pcl::PointXYZ pcl_start(node->coord1, node->coord2, node->coord3);
+  pointIdxRadiusSearchForNodes.clear();
+  pointRadiusSquaredDistanceForNodes.clear();
+  kdtreeForNodes.nearestKSearch(pcl_start, 5, pointIdxRadiusSearchForNodes,
+                                pointRadiusSquaredDistanceForNodes);
+  for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
+    node_index = pointIdxRadiusSearchForNodes[i];
+    nearest_nodes.push_back(node_index);
+  }
+  return nearest_nodes;
 }
 
 void SkeletonFinder::skeletonExpansion(Eigen::Vector3d startPt) {
@@ -1534,12 +1557,7 @@ vector<Eigen::Vector3d> SkeletonFinder::findPath(Eigen::Vector3d start,
   Eigen::Vector3d target_astar = Eigen::Vector3d::Zero();
   vector<Eigen::Vector3d> path;
 
-  // for (NodePtr node : NodeList) {
-  //   if (node->rollbacked) continue;
-  //   nodes_pcl.points.push_back(pcl::PointXYZ(node->coord(0), node->coord(1),
-  //   node->coord(2)));
-  // }
-  kdtreeForNodes.setInputCloud(nodes_pcl.makeShared());
+  kdtreeForNodes.setInputCloud(nodes_pcl);
 
   pcl::PointXYZ pcl_start(start(0), start(1), start(2));
   pointIdxRadiusSearchForNodes.clear();
@@ -1548,9 +1566,9 @@ vector<Eigen::Vector3d> SkeletonFinder::findPath(Eigen::Vector3d start,
                                 pointRadiusSquaredDistanceForNodes);
   for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
     Eigen::Vector3d nbhd;
-    nbhd << nodes_pcl[pointIdxRadiusSearchForNodes[i]].x,
-        nodes_pcl[pointIdxRadiusSearchForNodes[i]].y,
-        nodes_pcl[pointIdxRadiusSearchForNodes[i]].z;
+    nbhd << (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].x,
+        (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].y,
+        (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].z;
     if (checkSegClear(start, nbhd)) {
       start_astar = nbhd;
       break;
@@ -1564,9 +1582,9 @@ vector<Eigen::Vector3d> SkeletonFinder::findPath(Eigen::Vector3d start,
                                 pointRadiusSquaredDistanceForNodes);
   for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
     Eigen::Vector3d nbhd;
-    nbhd << nodes_pcl[pointIdxRadiusSearchForNodes[i]].x,
-        nodes_pcl[pointIdxRadiusSearchForNodes[i]].y,
-        nodes_pcl[pointIdxRadiusSearchForNodes[i]].z;
+    nbhd << (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].x,
+        (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].y,
+        (*nodes_pcl)[pointIdxRadiusSearchForNodes[i]].z;
     // TODO
     //if (checkSegClear(target, nbhd)) {
     target_astar = nbhd;
@@ -1582,6 +1600,8 @@ vector<Eigen::Vector3d> SkeletonFinder::findPath(Eigen::Vector3d start,
 
   vector<Eigen::Vector3d> astar_path =
       findPathByAStar(start_astar, target_astar);
+
+
   if (!astar_path.empty()) {
     path.push_back(start);
     for (Eigen::Vector3d waypoint : astar_path)
@@ -1814,16 +1834,6 @@ FrontierPtr SkeletonFinder::findFlowBackFrontier(Eigen::Vector3d pos,
   return NULL;
 }
 
-FacetPtr SkeletonFinder::findFlowBackFacet(Eigen::Vector3d pos, int index) {
-  for (FacetPtr f : center_NodeList.at(index)->facets) {
-    if (getDis(pos, f->center) > 2 * _max_ray_length)
-      continue;
-    if (checkPtOnFacet(f, pos))
-      return f;
-  }
-
-  return NULL;
-}
 
 bool SkeletonFinder::checkWithinBbx(Eigen::Vector3d pos) {
   return pos(0) >= _x_min && pos(1) >= _y_min && pos(2) >= _z_min &&
@@ -1837,8 +1847,6 @@ void SkeletonFinder::addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) 
   int x_num = ceil(x_length / _resolution) + 1;
   int y_num = ceil(y_length / _resolution) + 1;
   // int z_num = ceil(z_length / _resolution) + 1;
-
-  cout << "in bbx function" << endl;
 
   if (_is_simulation) { // Add ceiling and floor to search map
     for (int i = 0; i < x_num; i++) {

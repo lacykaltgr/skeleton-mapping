@@ -70,7 +70,6 @@ class AStar {
 
   // main data structure
   vector<NodePtr> node_pool;
-  std::priority_queue<NodePtr, std::vector<NodePtr>, NodeComparator> queue;
   std::vector<Eigen::Vector3d> path_nodes;
 
   void backtrack(const NodePtr& end_node, const Eigen::Vector3d& end);
