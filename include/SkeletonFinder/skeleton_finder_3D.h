@@ -201,6 +201,7 @@ class SkeletonFinder {
   vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);
   vector<NodeNearestNeighbors> run_nearestnodes();
+  vector<int> findNearestNodes(NodePtr node);
 
   /* operations on the tree */
   void recordNode(NodePtr new_node);

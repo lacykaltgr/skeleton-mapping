@@ -295,13 +295,13 @@ vector<NodeNearestNeighbors> SkeletonFinder::run_nearestnodes() {
 
 vector<int> SkeletonFinder::findNearestNodes(NodePtr node) {
   vector<int> nearest_nodes;
-  pcl::PointXYZ pcl_start(node->coord1, node->coord2, node->coord3);
+  pcl::PointXYZ pcl_start(node->coord(0), node->coord(1), node->coord(2));
   pointIdxRadiusSearchForNodes.clear();
   pointRadiusSquaredDistanceForNodes.clear();
   kdtreeForNodes.nearestKSearch(pcl_start, 5, pointIdxRadiusSearchForNodes,
                                 pointRadiusSquaredDistanceForNodes);
   for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
-    node_index = pointIdxRadiusSearchForNodes[i];
+    int node_index = pointIdxRadiusSearchForNodes[i];
     nearest_nodes.push_back(node_index);
   }
   return nearest_nodes;

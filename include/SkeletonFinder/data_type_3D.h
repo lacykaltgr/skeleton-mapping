@@ -26,7 +26,7 @@ struct NodeNearestNeighbors {
   int index;
   Eigen::Vector3d coord;
   vector<int> nearest_nodes;
-}
+};
 
 struct Vertex {
   Eigen::Vector3d coord;
