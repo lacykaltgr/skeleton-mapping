@@ -29,6 +29,8 @@ SkeletonFinder::SkeletonFinder(YAML::Node &config) {
     config["visualize_nbhd_facets"].as<bool>(), config["visualize_black_polygon"].as<bool>()
   );
 
+  nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+
 }
 
 SkeletonFinder::~SkeletonFinder() {}
@@ -85,6 +87,11 @@ void SkeletonFinder::setParam(
   _visualize_black_polygon = visualize_black_polygon;
 }
 
+void SkeletonFinder::addInitialFrontier(FrontierPtr frontier) {
+  frontier->index = loop_candidate_frontiers.size();
+  loop_candidate_frontiers.push_back(frontier);
+}
+
 void SkeletonFinder::reset() {
   treeDestruct();
   NodeList.clear();
@@ -126,11 +133,6 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
     return return_pair;
   }
 
-  // if (collisionCheck(search_Pt, _search_margin)) {
-  //   pair<double, int> return_pair(min_dis, min_dis_node_index);
-  //   return return_pair;
-  // }
-
   pcl::PointXYZ searchPoint;
   searchPoint.x = search_Pt(0);
   searchPoint.y = search_Pt(1);
@@ -162,8 +164,6 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
 }
 
 inline double SkeletonFinder::radiusSearchOnRawMap(Vector3d &search_Pt) {
-  //   if (getDis(search_Pt, start_pt) > sample_range + max_radius)
-  //     return max_radius - search_margin;
 
   pcl::PointXYZ searchPoint;
   searchPoint.x = search_Pt(0);
@@ -237,9 +237,7 @@ void SkeletonFinder::run_processing(
   if (_map_representation == 0) {
     kdtreeForRawMap.setInputCloud(raw_map_pcl);
   }
-
-  nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
-
+    
   Eigen::Vector3d start;
   start << _start_x, _start_y, _start_z;
 
@@ -292,6 +290,350 @@ vector<NodeNearestNeighbors> SkeletonFinder::run_nearestnodes() {
   }
   return nearest_nodes;
 }
+
+void SkeletonFinder::run_postprocessing(
+  double base_height, double connectionRadius, double tooCloseThreshold
+) {
+
+  vector<NodePtr> validNodeList;
+  auto valid_nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  
+  // find valid edges
+  for (NodePtr node : NodeList) {
+    // remove all edges from the graph
+    node->connected_Node_ptr.clear();
+
+    // remove nodes which are above/too close to objects
+    Eigen::Vector3d base_pos(node->coord(0), node->coord(1), base_height);
+    if (isValidPosition(base_pos)) {
+      validNodeList.push_back(node);
+      valid_nodes_pcl->points.push_back(
+        pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
+      );
+    }  
+  }
+
+  // add edges where the path is clear
+  kdtreeForNodes.setInputCloud(valid_nodes_pcl);
+  // initialize list for close nodes
+  vector<TooCloseCandidate> tooCloseCandidates;
+  for (NodePtr node : validNodeList) {
+    // radius search on valid nodes
+    vector<NodePtr> nearest_nodes;
+    pcl::PointXYZ pcl_start(node->coord(0), node->coord(1), node->coord(2));
+    pointIdxRadiusSearchForNodes.clear();
+    pointRadiusSquaredDistanceForNodes.clear();
+    kdtreeForNodes.radiusSearch(pcl_start, connectionRadius, pointIdxRadiusSearchForNodes,
+                                  pointRadiusSquaredDistanceForNodes);
+    for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
+      int node_index = pointIdxRadiusSearchForNodes[i];
+      nearest_nodes.push_back(validNodeList[node_index]); 
+    }
+
+    // add edges where the path is clear
+    for (NodePtr nearest_node : nearest_nodes) {
+      if (nearest_node == node)
+        continue;
+      
+      // check if the edge already exists
+      auto finder = find(node->connected_Node_ptr.begin(), node->connected_Node_ptr.end(), nearest_node);
+      if (finder != node->connected_Node_ptr.end())
+        continue;
+      
+      auto start = Eigen::Vector3d(node->coord(0), node->coord(1), base_height);
+      auto target = Eigen::Vector3d(nearest_node->coord(0), nearest_node->coord(1), base_height);
+      if (checkPathClear(start, target)) {
+        node->connected_Node_ptr.push_back(nearest_node);
+        nearest_node->connected_Node_ptr.push_back(node);
+
+        double distance = getDis(node, nearest_node);
+        if (getDis(node, nearest_node) < tooCloseThreshold) {
+          TooCloseCandidate candidate;
+          candidate.node1 = node;
+          candidate.node2 = nearest_node;
+          candidate.distance = getDis(node, nearest_node);
+          tooCloseCandidates.push_back(candidate);
+        }
+      }
+    }
+  }
+
+  // find nodes which are too close to each other and remove one of them
+  // based on how it improves the graph
+  removeTooCloseNodes(tooCloseCandidates);
+
+  // (find intersecting edges, place a nearby node there if possible)
+  // add all intersections and points and remove too close ones
+  int counter = 0;
+  int max_iter = 100;
+  while (true) {
+    vector<NodePtr> newNodes;
+    for (NodePtr base_node: validNodeList) {
+      for (NodePtr base_connected_node: base_node->connected_Node_ptr) {
+        for (NodePtr base_connected_other_node: base_node->connected_Node_ptr) {
+          if (base_connected_node == base_connected_other_node)
+            continue;
+          for (NodePtr other_ngb_node: base_connected_other_node->connected_Node_ptr) {
+            // check if other_ngb_node is base_node or base_connected_node
+            if (other_ngb_node == base_node || other_ngb_node == base_connected_node)
+              continue;
+            
+            // check if base_node->base_connected_node intersects with base_connected_other_node->other_ngb_node
+            Eigen::Vector2d base_to_base_connected_start(base_node->coord(0), base_node->coord(1));
+            Eigen::Vector2d base_to_base_connected_end(base_connected_node->coord(0), base_connected_node->coord(1));
+            Eigen::Vector2d other_connected_to_ngb_connected_start(base_connected_other_node->coord(0), base_connected_other_node->coord(1));
+            Eigen::Vector2d other_connected_to_ngb_connected_end(other_ngb_node->coord(0), other_ngb_node->coord(1));
+            Eigen::Vector2d intersection;
+
+            bool has_intersect = calculateIntersection2D(
+              base_to_base_connected_start, base_to_base_connected_end,
+              other_connected_to_ngb_connected_start, other_connected_to_ngb_connected_end,
+              intersection
+            );
+
+            if (has_intersect) {
+              NodePtr newNode = new Node(Eigen::Vector3d(intersection.x(), intersection.y(), base_height), NULL, false);
+              newNodes.push_back(newNode);
+
+              // disconnect base_node and base_connected_node
+              base_node->connected_Node_ptr.erase(
+                remove(base_node->connected_Node_ptr.begin(), base_node->connected_Node_ptr.end(), base_connected_node),
+                base_node->connected_Node_ptr.end()
+              );
+              base_connected_node->connected_Node_ptr.erase(
+                remove(base_connected_node->connected_Node_ptr.begin(), base_connected_node->connected_Node_ptr.end(), base_node),
+                base_connected_node->connected_Node_ptr.end()
+              );
+              // disconnect base_other_connected_node and other_ngb_node
+              base_connected_other_node->connected_Node_ptr.erase(
+                remove(base_connected_other_node->connected_Node_ptr.begin(), base_connected_other_node->connected_Node_ptr.end(), other_ngb_node),
+                base_connected_other_node->connected_Node_ptr.end()
+              );
+              other_ngb_node->connected_Node_ptr.erase(
+                remove(other_ngb_node->connected_Node_ptr.begin(), other_ngb_node->connected_Node_ptr.end(), base_connected_other_node),
+                other_ngb_node->connected_Node_ptr.end()
+              );
+
+              // connect base_node and new node
+              base_node->connected_Node_ptr.push_back(newNode);
+              newNode->connected_Node_ptr.push_back(base_node);
+              // connect new node and base_connected_node
+              base_connected_node->connected_Node_ptr.push_back(newNode);
+              newNode->connected_Node_ptr.push_back(base_connected_node);
+              // base_connected_other node and new node
+              base_connected_other_node->connected_Node_ptr.push_back(newNode);
+              newNode->connected_Node_ptr.push_back(base_connected_other_node);
+              // new node and other_ngb_node
+              newNode->connected_Node_ptr.push_back(other_ngb_node);
+              other_ngb_node->connected_Node_ptr.push_back(newNode);
+            }
+          }
+        }
+      }
+    }
+
+    if (newNodes.empty() || counter++ > max_iter)
+      break;
+  
+    // add edges where the path is clear
+
+    // remove too close nodes
+  }
+
+
+}
+
+
+
+void drawEdges()
+
+
+bool calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
+                             const Eigen::Vector2d& p2_start, const Eigen::Vector2d& p2_end,
+                             Eigen::Vector2d& intersection) {
+    Eigen::Vector2d dir1 = p1_end - p1_start;
+    Eigen::Vector2d dir2 = p2_end - p2_start;
+    Eigen::Vector2d r = p1_start - p2_start;
+    double denominator = dir1.x() * dir2.y() - dir1.y() * dir2.x();
+
+    // If denominator is zero, the lines are parallel (or collinear)
+    if (denominator == 0.0) {
+        return false;  // No intersection, lines are parallel
+    }
+
+    double t = (r.x() * dir2.y() - r.y() * dir2.x()) / denominator;
+    double u = (r.x() * dir1.y() - r.y() * dir1.x()) / denominator;
+
+    // Check if t and u are within the valid range [0, 1] for both line segments
+    if (t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0) {
+        intersection = p1_start + t * dir1;
+        return true;  // Intersection found
+    }
+    return false;  // No intersection within the segment bounds
+}
+
+
+
+void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates) {
+  // sort tooCloseCandidates by distance
+  sort(tooCloseCandidates.begin(), tooCloseCandidates.end(), 
+    [](const TooCloseCandidate &a, const TooCloseCandidate &b) -> bool {
+      return a.distance < b.distance;
+    }
+  );
+  // loop through tooCloseCandidates
+  for (TooCloseCandidate candidate : tooCloseCandidates) {
+    NodePtr node1 = candidate.node1;
+    NodePtr node2 = candidate.node2;
+    double lossToRemove1 = calculateNodeRemovalLoss(node2, node1);
+    double lossToRemove2 = calculateNodeRemovalLoss(node1, node2);
+
+
+    // draw line segment between node1 and node2
+    // extend the line segment to the left and right
+    // check if the path is clear (not close to any other nodes, on either side)
+    // move each as mush as it can
+    // place them where optimal
+    // if it cant, then find somewhere between them to merge
+    // if it cant, then remove one of them
+
+    // merit function:
+    // 
+
+
+
+
+
+    if (loccToRemove1 > 0 && lossToRemove2 > 0)
+      continue;
+
+    if (lossToRemove1 == 0 && lossToRemove2 == 0) {
+      // remove the one with the smaller number of connected nodes
+      if (node1->connected_Node_ptr.size() < node2->connected_Node_ptr.size()) {
+        node_to_remove = node1;
+        node_to_keep = node2;
+      } else {
+        node_to_remove = node2;
+        node_to_keep = node1;
+      }
+    } else  {
+      // remove the node with the smaller loss
+      if (lossToRemove1 < lossToRemove2) {
+        if (lossToRemove1 >= 0) continue;
+        node_to_remove = node1;
+        node_to_keep = node2;
+      } else {
+        if (lossToRemove2 >= 0) continue;
+        node_to_remove = node2;
+        node_to_keep = node1;
+      }
+    }
+
+
+    // merge the nodes
+    mergeNodes(node_to_keep, node_to_remove);
+    // remove the node
+    validNodeList.erase(
+      remove(validNodeList.begin(), validNodeList.end(), node_to_remove),
+      validNodeList.end()
+    );
+  }
+}
+
+
+void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove) {
+
+  // loop though the connected nodes of node_to_remove
+  // add the connected nodes to node_to_keep
+  for (NodePtr connected_node : node_to_remove->connected_Node_ptr) {
+    // skip if the connected node is the node_to_keep
+    if (connected_node == node_to_keep)
+      continue;
+
+    // skip if connected node is connected to node_to_keep
+    auto finder = find(node_to_keep->connected_Node_ptr.begin(), node_to_keep->connected_Node_ptr.end(), connected_node);
+    if (finder != node_to_keep->connected_Node_ptr.end())
+      continue;
+
+    // return -1 if the path is not clear
+    if (!checkPathClear(node_to_keep->coord, connected_node->coord))
+      return -1;
+
+    // add the connected node to node_to_keep
+    node_to_keep->connected_Node_ptr.push_back(connected_node);
+    connected_node->connected_Node_ptr.push_back(node_to_keep);
+    connected_node->connected_Node_ptr.erase(
+      remove(connected_node->connected_Node_ptr.begin(), connected_node->connected_Node_ptr.end(), node_to_remove),
+      connected_node->connected_Node_ptr.end()
+    );
+  }
+}
+
+
+double calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove) {
+  // calculate the loss of removing node_to_remove from node
+  // if the loss is negative, it is beneficial to remove the node
+  // if the loss is positive, it is beneficial to keep the node
+  // if the loss is zero, it doesn't matter
+  // the loss is calculated as the sum of the path lengths between the connected nodes
+  // before and after the removal of node_to_remove
+  double loss = 0;
+  double nodes_distance = getDis(node_to_keep, node_to_remove);
+  for (NodePtr connected_node : node_to_remove->connected_Node_ptr) {
+    // skip if the connected node is the node_to_keep
+    if (connected_node == node_to_keep)
+      continue;
+
+    // skip if connected node is connected to node_to_keep
+    auto finder = find(node_to_keep->connected_Node_ptr.begin(), node_to_keep->connected_Node_ptr.end(), connected_node);
+    if (finder != node_to_keep->connected_Node_ptr.end())
+      continue;
+
+    // return -1 if the path is not clear
+    if (!checkPathClear(node_to_keep->coord, connected_node->coord))
+      return numeric_limits<double>::max();;
+
+    // calculate the path length before the removal
+    double path_length_before = nodes_distance +  getDis(node_to_remove, connected_node);
+    double path_length_after = getDis(node_to_keep, connected_node);
+
+    // add the difference to the loss
+    loss += path_length_after - path_length_before;
+  }
+  return loss;
+}
+
+
+bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
+  Eigen::Vector3d downwards(0, 0, -1);
+  pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, 2*base_height);
+  if (raycast_result.second == -2)
+    return false;
+  double floor_height = raycast_result.first(2);
+  if (floor_height < base_height - 0.1)
+    return false;
+  return true;
+}
+
+
+bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  double length = (pos2 - pos1).norm();
+  double step_length = _resolution;
+
+  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
+  int num_steps = ceil(length / step_length);
+
+  Eigen::Vector3d begin_pos = pos1;
+  for (int i = 0; i < num_steps; i++) {
+    Eigen::Vector3d check_pos = begin_pos + i * step;
+    if (!isValidPosition(check_pos))
+      return false;
+  }
+  if (!isValidPosition(pos2))
+    return false;
+  return true;
+}
+
 
 vector<int> SkeletonFinder::findNearestNodes(NodePtr node) {
   vector<int> nearest_nodes;
@@ -393,9 +735,12 @@ bool SkeletonFinder::initNode(NodePtr curNodePtr) {
   auto prev = begin;
   chrono::high_resolution_clock::time_point curr;
 
+  bool isobject = curNodePtr->isGate && curNodePtr->seed_frontier->master_node->index < 40;
+
   if (!checkWithinBbx(curNodePtr->coord)) {
     return false;
   }
+
   if (!checkFloor(curNodePtr)) {
     return false;
   }
@@ -498,6 +843,7 @@ void SkeletonFinder::genBlackAndWhiteVertices(NodePtr nodePtr) {
   }
 }
 
+
 void SkeletonFinder::genSamplesOnUnitSphere() {
   // Fibonicci sphere
   double phi = M_PI * (3 - sqrt(5));
@@ -515,6 +861,8 @@ void SkeletonFinder::genSamplesOnUnitSphere() {
     sample_directions.push_back(sample);
   }
 }
+
+
 
 // -2: collision not found within cut_off_length
 // -1: collision is with map
@@ -1095,9 +1443,12 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
 
   // Count number of contact black vertices on each frontiers
   for (VertexPtr v : node->black_vertices) {
+
     // only process vertices collide with other polyhedrons
     if (v->collision_node_index < 0)
       continue;
+
+
     // hit_on_pcl is on seed_frontier which is already connected
     if (checkPtOnFrontier(node->seed_frontier, v->coord)) {
       // ROS_WARN("hit_on_pcl is on seed_frontier");
@@ -1111,7 +1462,7 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
       collision_node_index_log.push_back(v->collision_node_index);
       continue;
     }
-    // loop_frontier_counter.at(loop_ftr->index)++;
+
     flow_back_frontier_log.at(loop_ftr->index).push_back(v->coord);
     frontiers.at(loop_ftr->index) = loop_ftr;
   }
@@ -1126,7 +1477,7 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
       // ROS_ERROR("Radius: %f",
       // getVerticesRadius(flow_back_frontier_log.at(i)));
       if (getVerticesRadius(flow_back_frontier_log.at(i)) <
-          _min_flowback_creation_radius_threshold)
+          _min_flowback_creation_radius_threshold) 
         continue;
     }
     if (pending_frontier_index.empty())
@@ -1280,6 +1631,7 @@ bool SkeletonFinder::initFrontier(FrontierPtr frontier) {
     Eigen::Vector3d cross1 = (coord2 - coord1).cross(intersection - coord1);
     Eigen::Vector3d cross2 = (coord3 - coord2).cross(intersection - coord2);
     Eigen::Vector3d cross3 = (coord1 - coord3).cross(intersection - coord3);
+
     if (cross1(0) * cross2(0) > 0 && cross2(0) * cross3(0) > 0 &&
         cross3(0) * cross1(0) > 0) {
       frontier->proj_center = intersection;
@@ -1325,7 +1677,6 @@ bool SkeletonFinder::initFrontier(FrontierPtr frontier) {
         frontier->vertices.push_back(v_facet);
     }
   }
-
   return proj_center_found;
 }
 
@@ -1675,7 +2026,9 @@ bool SkeletonFinder::checkFloor(NodePtr node) {
     // ROS_INFO("Floor not found within max_ray_length");
     return false;
   }
+
   double floor_height = raycast_result.first(2);
+
 
   // First node case
   if (node->seed_frontier == NULL) {
@@ -1703,6 +2056,7 @@ bool SkeletonFinder::checkFloor(NodePtr node) {
   }
 
   double parent_floor_height = node->seed_frontier->master_node->dis_to_floor;
+
   if (fabs(floor_height - parent_floor_height) > _max_height_diff) {
     // ROS_INFO("large diff from parent");
     // ROS_INFO("parent_floor_height: %f", parent_floor_height);
@@ -1824,9 +2178,12 @@ bool SkeletonFinder::checkPtOnFacet(FacetPtr facet, Eigen::Vector3d pt) {
 
 FrontierPtr SkeletonFinder::findFlowBackFrontier(Eigen::Vector3d pos,
                                                  int index) {
+
   for (FrontierPtr f : center_NodeList.at(index)->frontiers) {
-    if (getDis(pos, f->proj_center) > 2 * _max_ray_length)
+    if (getDis(pos, f->proj_center) > 2 * _max_ray_length) {
       continue;
+    }
+      
     if (checkPtOnFrontier(f, pos))
       return f;
   }

@@ -113,6 +113,7 @@ void SkeletonFinder::visConnections() {
 
         if (cur_node->isGate)
             continue;
+        
         int num_connect_nodes = cur_node->connected_Node_ptr.size();
         // if (cur_node->isGate) {
         //   ROS_WARN("(%f, %f, %f) is a GATE node having %d connections",
@@ -126,7 +127,6 @@ void SkeletonFinder::visConnections() {
         
 
         // filestream for saving connections
-
         std::fstream fs;
         fs.open("/workspace/ros2_ws/src/global_planner/resource/connections.txt", std::fstream::in | std::fstream::out | std::fstream::app);
         for (int j = 0; j < num_connect_nodes; j++) {

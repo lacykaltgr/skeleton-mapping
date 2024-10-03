@@ -202,6 +202,7 @@ class SkeletonFinder {
                       double _path_target_x, double _path_target_y, double _path_target_z);
   vector<NodeNearestNeighbors> run_nearestnodes();
   vector<int> findNearestNodes(NodePtr node);
+  void addInitialFrontier(FrontierPtr frontier);
 
   /* operations on the tree */
   void recordNode(NodePtr new_node);
