@@ -8,9 +8,9 @@ z_max: 4
 
 # Start positions
 start:
-  x: 0.0
+  x: 1.0
   y: 0.0
-  z: 0.5
+  z: 1.0 # robot 
 
 #1.83343 2.9898 -0.0913357
 #3.41294 2.82653 0.32438
@@ -32,14 +32,14 @@ frontier_creation_threshold: 0.3
 frontier_jump_threshold: 3.0
 frontier_split_threshold: 2.0
 min_flowback_creation_threshold: 1
-min_flowback_creation_radius_threshold: 0.1
+min_flowback_creation_radius_threshold: 0.25
 
 # Ray and node settings
-min_node_radius: 2.0
+min_node_radius: 0.2
 search_margin: 0.4
-max_ray_length: 3.0
-max_expansion_ray_length: 3.0
-max_height_diff: 0.5
+max_ray_length: 6.0
+max_expansion_ray_length: 6.0
+max_height_diff: 0.2
 sampling_density: 50
 max_facets_grouped: 10
 resolution: 0.1

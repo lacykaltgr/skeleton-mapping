@@ -220,12 +220,7 @@ struct Node {
 struct TooCloseCandidate {
   NodePtr node1;
   NodePtr node2;
-  double dis;
-  TooCloseCandidate(NodePtr node1_, NodePtr node2_, double dis_) {
-    node1 = node1_;
-    node2 = node2_;
-    dis = dis_;
-  }
-}
+  double distance;
+};
 
 #endif

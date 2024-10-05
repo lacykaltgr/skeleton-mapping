@@ -201,8 +201,19 @@ class SkeletonFinder {
   vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);
   vector<NodeNearestNeighbors> run_nearestnodes();
+  void run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold);
   vector<int> findNearestNodes(NodePtr node);
   void addInitialFrontier(FrontierPtr frontier);
+  double calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove);
+  bool checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
+  bool isValidPosition(Eigen::Vector3d base_pos);
+  bool calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
+                             const Eigen::Vector2d& p2_start, const Eigen::Vector2d& p2_end,
+                             Eigen::Vector2d& intersection);
+  void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates);
+  void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove);
+
+
 
   /* operations on the tree */
   void recordNode(NodePtr new_node);

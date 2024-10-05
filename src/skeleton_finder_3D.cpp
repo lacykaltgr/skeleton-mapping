@@ -444,11 +444,7 @@ void SkeletonFinder::run_postprocessing(
 }
 
 
-
-void drawEdges()
-
-
-bool calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
+bool SkeletonFinder::calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
                              const Eigen::Vector2d& p2_start, const Eigen::Vector2d& p2_end,
                              Eigen::Vector2d& intersection) {
     Eigen::Vector2d dir1 = p1_end - p1_start;
@@ -474,7 +470,7 @@ bool calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vecto
 
 
 
-void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates) {
+void SkeletonFinder::removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates) {
   // sort tooCloseCandidates by distance
   sort(tooCloseCandidates.begin(), tooCloseCandidates.end(), 
     [](const TooCloseCandidate &a, const TooCloseCandidate &b) -> bool {
@@ -500,12 +496,11 @@ void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates) {
     // merit function:
     // 
 
-
-
-
-
-    if (loccToRemove1 > 0 && lossToRemove2 > 0)
+    if (lossToRemove1 > 0 && lossToRemove2 > 0)
       continue;
+
+    NodePtr node_to_remove;
+    NodePtr node_to_keep;
 
     if (lossToRemove1 == 0 && lossToRemove2 == 0) {
       // remove the one with the smaller number of connected nodes
@@ -532,16 +527,18 @@ void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates) {
 
     // merge the nodes
     mergeNodes(node_to_keep, node_to_remove);
+
+    // TODO: commented out, needs reference or to be put elsewhere
     // remove the node
-    validNodeList.erase(
-      remove(validNodeList.begin(), validNodeList.end(), node_to_remove),
-      validNodeList.end()
-    );
+    //validNodeList.erase(
+    //  remove(validNodeList.begin(), validNodeList.end(), node_to_remove),
+    //  validNodeList.end()
+    //);
   }
 }
 
 
-void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove) {
+void SkeletonFinder::mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove) {
 
   // loop though the connected nodes of node_to_remove
   // add the connected nodes to node_to_keep
@@ -557,7 +554,8 @@ void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove) {
 
     // return -1 if the path is not clear
     if (!checkPathClear(node_to_keep->coord, connected_node->coord))
-      return -1;
+    // TODO: returning is not enough, has to delete the connections made
+      return;
 
     // add the connected node to node_to_keep
     node_to_keep->connected_Node_ptr.push_back(connected_node);
@@ -570,7 +568,7 @@ void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove) {
 }
 
 
-double calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove) {
+double SkeletonFinder::calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove) {
   // calculate the loss of removing node_to_remove from node
   // if the loss is negative, it is beneficial to remove the node
   // if the loss is positive, it is beneficial to keep the node
@@ -606,6 +604,7 @@ double calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove) {
 
 bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
   Eigen::Vector3d downwards(0, 0, -1);
+  double base_height = base_pos(2);
   pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, 2*base_height);
   if (raycast_result.second == -2)
     return false;

@@ -72,7 +72,7 @@ int main(int argc, char **argv)
         std::string output_path = argv[2];  
 
         float min_z = 0.1f, max_z = 20.0f;
-        int pixel_step_size = 2, median_filter_size = 0;
+        int pixel_step_size = 4, median_filter_size = 0;
         int image_step_size = 5;
 
 

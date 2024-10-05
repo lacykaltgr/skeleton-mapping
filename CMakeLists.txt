@@ -64,19 +64,14 @@ target_link_libraries(skeleton_finder_3D_test
     yaml-cpp
 )
 
-add_executable(skeleton_finder_3D_obj_test
-    src/skeleton_finder_3D_test_obj.cpp
-    src/skeleton_finder_3D.cpp
-    src/io.cpp
-    utils/quickhull/QuickHull.cpp
-    utils/A_star/A_star.cpp
+add_executable(map_merger
+    utils/map_merger.cpp
 )
 
-target_link_libraries(skeleton_finder_3D_obj_test
+target_link_libraries(map_merger
     ${PCL_LIBRARIES}
-    yaml-cpp
-    nlohmann_json::nlohmann_json
 )
+
 
 #add_executable(dense_recon_parallel
 #    utils/dense_reconstruction_parallel.cpp
