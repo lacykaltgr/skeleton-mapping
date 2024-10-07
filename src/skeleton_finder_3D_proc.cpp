@@ -46,21 +46,11 @@ int main(int argc, char **argv) {
   if (downsample > 0) {
     cout << "Downsampling map..." << endl;
     downsampled = skeleton_finder_3D.downsample(cloud_xyz, downsample);
-    cout << "Downsampled map size: " << cloud_xyz->points.size() << endl;
+    cout << "Downsampled map size: " << downsampled->points.size() << endl;
   } else {
     downsampled = cloud_xyz;
   }
 
   skeleton_finder_3D.run_processing(downsampled);
-
-  double path_start_x = config["path_start"]["x"].as<double>();
-  double path_start_y = config["path_start"]["y"].as<double>();
-  double path_start_z = config["path_start"]["z"].as<double>();
-  double path_target_x = config["path_target"]["x"].as<double>();
-  double path_target_y = config["path_target"]["y"].as<double>();
-  double path_target_z = config["path_target"]["z"].as<double>();
-  skeleton_finder_3D.run_findpath(
-    path_start_x, path_start_y, path_start_z,
-    path_target_x, path_target_y, path_target_z
-  );
+  skeleton_finder_3D.run_postprocessing(0.5, 5, 0.5);
 }

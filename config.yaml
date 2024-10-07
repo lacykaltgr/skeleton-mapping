@@ -1,10 +1,10 @@
 # Bounding box
-x_min: -15
-x_max: 6
-y_min: -12.5
-y_max: 12.5
+x_min: -25
+x_max: 7
+y_min: -28
+y_max: 60
 z_min: -1
-z_max: 4
+z_max: 5
 
 # Start positions
 start:
@@ -35,17 +35,16 @@ min_flowback_creation_threshold: 1
 min_flowback_creation_radius_threshold: 0.25
 
 # Ray and node settings
-min_node_radius: 0.2
-search_margin: 0.4
-max_ray_length: 6.0
-max_expansion_ray_length: 6.0
-max_height_diff: 0.2
+min_node_radius: 0.5
+search_margin: 0.2
+max_ray_length: 3.0
+max_expansion_ray_length: 3.0
+max_height_diff: 1.0
 sampling_density: 50
 max_facets_grouped: 10
 resolution: 0.1
 
-truncated_z_high: 4
-truncated_z_low: -2
+downsample: 0.05
 
 # Debug and visualization
 debug_mode: false

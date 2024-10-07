@@ -143,7 +143,7 @@ class SkeletonFinder {
     int min_flowback_creation_threshold, double min_flowback_creation_radius_threshold,
     double min_node_radius, double search_margin, double max_ray_length,
     double max_expansion_ray_length, double max_height_diff, int sampling_density,
-    int max_facets_grouped, double resolution, double truncated_z_high, double truncated_z_low,
+    int max_facets_grouped, double resolution,
     bool debug_mode, bool bad_loop,
     bool visualize_final_result_only, bool visualize_all, bool visualize_outwards_normal,
     bool visualize_nbhd_facets, bool visualize_black_polygon
@@ -196,6 +196,7 @@ class SkeletonFinder {
   FacetPtr findFlowBackFacet(Eigen::Vector3d pos, int index);
   bool checkWithinBbx(Eigen::Vector3d pos);
   void addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr downsample(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, const double leaf);
 
   void run_processing(const pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud_map);  // Changed parameter type
   vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
@@ -204,26 +205,52 @@ class SkeletonFinder {
   void run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold);
   vector<int> findNearestNodes(NodePtr node);
   void addInitialFrontier(FrontierPtr frontier);
-  double calculateNodeRemovalLoss(NodePtr node_to_keep, NodePtr node_to_remove);
+  bool canBeReplacedBy(NodePtr node_to_keep, NodePtr node_to_remove);
   bool checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
   bool isValidPosition(Eigen::Vector3d base_pos);
+  void handleInterSections(vector<NodePtr> validNodeList, double base_height);
   bool calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
                              const Eigen::Vector2d& p2_start, const Eigen::Vector2d& p2_end,
                              Eigen::Vector2d& intersection);
-  void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates);
-  void mergeNodes(NodePtr node_to_keep, NodePtr node_to_remove);
+  void removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates, vector<NodePtr>& validNodeList);
+  void mergeNodes(NodePtr node1, NodePtr node2, vector<NodePtr>& validNodeList, double node1_w, double node2_w);
+  void killOtherNode(NodePtr node_to_keep, NodePtr node_to_remove, vector<NodePtr>& validNodeList);
+  vector<NodePtr> closestNodes(NodePtr node, double maxDistance, vector<NodePtr>& validNodeList);
+  Eigen::MatrixXd getAdjMatrix(vector<NodePtr> validNodeList);
 
 
 
   /* operations on the tree */
   void recordNode(NodePtr new_node);
-  void treeDestruct();
+
+
+  vector<vector<int>> spectralClustering(vector<NodePtr> validNodeList);
+  void save_clusters(vector<vector<int>> clusters);
+
 
   /* utility functions */
-  inline double getDis(const NodePtr node1, const NodePtr node2);
-  inline double getDis(const NodePtr node1, const Eigen::Vector3d &pt);
-  inline double getDis(const Eigen::Vector3d &p1, const Eigen::Vector3d &p2);
-  inline double getDis(const Eigen::Vector3i &p1, const Eigen::Vector3i &p2);
+  inline double getDis(const NodePtr node1, const NodePtr node2) {
+    return sqrt(pow(node1->coord(0) - node2->coord(0), 2) +
+                pow(node1->coord(1) - node2->coord(1), 2) +
+                pow(node1->coord(2) - node2->coord(2), 2));
+  }
+
+  inline double getDis(const NodePtr node1, const Eigen::Vector3d &pt) {
+    return sqrt(pow(node1->coord(0) - pt(0), 2) +
+                pow(node1->coord(1) - pt(1), 2) +
+                pow(node1->coord(2) - pt(2), 2));
+  }
+
+  inline double getDis(const Eigen::Vector3d &p1, const Eigen::Vector3d &p2) {
+    return sqrt(pow(p1(0) - p2(0), 2) + pow(p1(1) - p2(1), 2) +
+                pow(p1(2) - p2(2), 2));
+  }
+
+  inline double getDis(const Eigen::Vector3i &p1, const Eigen::Vector3i &p2) {
+    return sqrt((double)(pow(p1(0) - p2(0), 2) + pow(p1(1) - p2(1), 2) +
+                        pow(p1(2) - p2(2), 2)));
+  }
+
   // inline Eigen::Vector3d genSample();
   inline pair<double, int> radiusSearch(Eigen::Vector3d &pt);
   inline double radiusSearchOnRawMap(Eigen::Vector3d &pt);

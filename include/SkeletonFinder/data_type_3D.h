@@ -192,6 +192,7 @@ struct Node {
   vector<FacetPtr> facets;
   vector<FrontierPtr> frontiers;
   vector<NodePtr> connected_Node_ptr;
+  vector<dobule> connected_Node_radius;
 
   vector<vec3> sampling_directions;
   vector<vec3> valid_sampling_directions;
@@ -222,5 +223,22 @@ struct TooCloseCandidate {
   NodePtr node2;
   double distance;
 };
+
+
+struct PathCandidate {
+  vector<NodePtr> path;
+  NodePtr last_node() {
+    return path.back();
+  }
+  PathCandidate clone() {
+    PathCandidate new_path;
+    for (NodePtr node : path) {
+      new_path.path.push_back(node);
+    }
+    return new_path;
+  }
+  PathCandidate() {}
+  ~PathCandidate() {}
+}
 
 #endif

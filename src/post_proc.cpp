@@ -1,0 +1,509 @@
+#include "SkeletonFinder/skeleton_finder_3D.h"
+#include "SkeletonFinder/spectral/SpectralClustering.h"
+#include <pcl/io/pcd_io.h>
+
+using namespace Eigen;
+using namespace std;
+
+
+/*
+Post-processing of 3D skeleton
+
+1. Extend the skeleton graph by finding unexplored areas
+  - Find nodes with only 1 connection in the original graph
+  - Run the algorithm again initialized from that point, or its neighbor
+  - Repeat until bounding box coverage is above a threshold
+2. Remove nodes which are above/too close to objects
+  - Remove nodes which are above objects
+  - Find merging point for objects which are too close 
+  - (weighted by the number of connections, more connections -> more important)
+3. Draw edges based on the clear path
+  - Find valid edges
+  - Add edges where the path is clear
+4. Spectral clustering
+
+
+
+IDEA: store for every neighbour from what radius of the base node is the path always clear
+
+*/
+
+
+
+void SkeletonFinder::run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold) {
+
+  auto twod_nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+  for (NodePtr node: NodeList) {
+    node->coord = Eigen::Vector3d(node->coord(0), node->coord(1), base_height);
+    twod_nodes_pcl->points.push_back(
+      pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
+    );
+  }
+
+  vector<NodePtr> validNodeList;
+  auto valid_nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+
+  // merge / remove nodes which are too close to each other
+  kdtreeForNodes.setInputCloud(twod_nodes_pcl);
+  vector<TooCloseCandidate> tooCloseCandidates;
+  for (NodePtr node: NodeList) {
+    
+    vector<NodePtr> nodes_too_close = closestNodes(node, tooCloseThreshold, NodeList);
+
+    for (NodePtr nearest_node: nodes_too_close) {
+      if (nearest_node == node)
+        continue;
+      bool added = false;
+      for (TooCloseCandidate candidate: tooCloseCandidates) {
+        if (candidate.node1 == nearest_node && candidate.node2 == node) {
+          added = true;
+          break;
+        }
+      }
+      if (added)
+        continue;
+      TooCloseCandidate candidate;
+      candidate.node1 = node;
+      candidate.node2 = nearest_node;
+      candidate.distance = getDis(node->coord, nearest_node->coord);
+      tooCloseCandidates.push_back(candidate);
+    }
+  }
+  // based on how it improves the graph
+  removeTooCloseNodes(tooCloseCandidates, NodeList);
+
+  cout << "Number of nodes after removing close nodes: " << NodeList.size() << endl;
+
+
+  // initial purge
+  for (NodePtr node : NodeList) {
+    // remove all edges from the graph
+    node->connected_Node_ptr.clear();
+
+    // remove nodes which are above/too close to objects
+    //Eigen::Vector3d base_pos(node->coord(0), node->coord(1), base_height);
+    if (isValidPosition(node->coord)) {
+      
+      validNodeList.push_back(node);
+      valid_nodes_pcl->points.push_back(
+        pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
+      );
+    }
+  }
+
+  cout << "Number of valid nodes: " << validNodeList.size() << endl;
+
+  // add edges where the path is clear
+  int counter = 0;
+  kdtreeForNodes.setInputCloud(valid_nodes_pcl);
+  for (NodePtr node : validNodeList) {
+    // radius search on valid nodes
+    vector<NodePtr> nearest_nodes = closestNodes(node, connectionRadius, validNodeList);
+
+    // add edges where the path is clear
+    for (NodePtr nearest_node : nearest_nodes) {
+      if (nearest_node == node)
+        continue;
+      
+      // check if the edge already exists
+      auto finder = find(node->connected_Node_ptr.begin(), node->connected_Node_ptr.end(), nearest_node);
+      if (finder != node->connected_Node_ptr.end())
+        continue;
+      
+      auto start = Eigen::Vector3d(node->coord(0), node->coord(1), base_height);
+      auto target = Eigen::Vector3d(nearest_node->coord(0), nearest_node->coord(1), base_height);
+      if (checkPathClear(start, target)) {
+        node->connected_Node_ptr.push_back(nearest_node);
+        nearest_node->connected_Node_ptr.push_back(node);
+        counter++;
+      }
+    }
+  }
+
+  cout << "Number of edges added: " << counter << endl;
+
+  // calulate radius for each node->neighbour pair
+  // --------------------------------------------
+  genSamplesOnUnitCircle(base_height);
+  for (NodePtr node: validNodeList) {
+    for (NodePtr connected_node: node->connected_Node_ptr) {
+      double radius = 0.0;
+      bool safe = true;
+      while (safe) {
+        radius += _resolution;
+        for (Eigen::Vector3d sample: sample_directions) {
+          Eigen::Vector3d start = node->coord + sample * radius;
+          Eigen::Vector3d target = connected_node->coord;
+          if (!checkPathClear(start, target)) {
+            safe = false;
+            break;
+          }
+        } 
+      }
+      node->connected_Node_radius.push_back(radius - _resolution);
+    }
+  }
+
+
+
+  // if we want to handle intersections as nodes
+  // --------------------------------------------
+  // handleInterSections(validNodeList, base_height);
+  // removeTooCloseNodes(tooCloseCandidates, validNodeList);
+
+
+  // spectral clustering
+  // -----------------------
+  //auto clusters = spectralClustering(validNodeList);
+  //save_clusters(clusters);
+  //cout << "Number of clusters: " << clusters.size() << endl;
+}
+
+
+void SkeletonFinder::mergeNodes(NodePtr node1, NodePtr node2, vector<NodePtr>& validNodeList, double node1_w, double node2_w) {
+  // create new node weighted by the weights
+  Eigen::Vector3d new_coord = (node1->coord * node1_w + node2->coord * node2_w) / (node1_w + node2_w);
+  node1->coord = new_coord;
+
+  // add all edges from one node to another
+  // does not check for collision validity
+  killOtherNode(node1, node2, validNodeList);
+}
+
+// add all edges from one node to another
+// does not check for collision validity
+void SkeletonFinder::killOtherNode(NodePtr node_to_keep, NodePtr node_to_remove, vector<NodePtr>& validNodeList) {
+  // loop though the connected nodes of node_to_remove
+  // add the connected nodes to node_to_keep
+  for (NodePtr connected_node : node_to_remove->connected_Node_ptr) {
+    // skip if the connected node is the node_to_keep
+    if (connected_node == node_to_keep)
+      continue;
+
+    // skip if connected node is connected to node_to_keep
+    auto finder = find(node_to_keep->connected_Node_ptr.begin(), node_to_keep->connected_Node_ptr.end(), connected_node);
+    if (finder != node_to_keep->connected_Node_ptr.end())
+      continue;
+
+    // add the connected node to node_to_keep
+    node_to_keep->connected_Node_ptr.push_back(connected_node);
+    connected_node->connected_Node_ptr.push_back(node_to_keep);
+    connected_node->connected_Node_ptr.erase(
+      remove(connected_node->connected_Node_ptr.begin(), connected_node->connected_Node_ptr.end(), node_to_remove),
+      connected_node->connected_Node_ptr.end()
+    );
+  }
+
+  // remove node_to_remove from validNodeList
+  validNodeList.erase(
+    remove(validNodeList.begin(), validNodeList.end(), node_to_remove),
+    validNodeList.end()
+  );
+}
+
+
+vector<NodePtr> SkeletonFinder::closestNodes(NodePtr node, double maxDistance, vector<NodePtr>& validNodeList) {
+    vector<NodePtr> nearest_nodes;
+
+    pcl::PointXYZ pcl_start(node->coord(0), node->coord(1), node->coord(2));
+
+    pointIdxRadiusSearchForNodes.clear();
+    pointRadiusSquaredDistanceForNodes.clear();
+    kdtreeForNodes.radiusSearch(pcl_start, maxDistance, pointIdxRadiusSearchForNodes,
+                                  pointRadiusSquaredDistanceForNodes);
+
+    for (std::size_t i = 0; i < pointIdxRadiusSearchForNodes.size(); ++i) {
+      int node_index = pointIdxRadiusSearchForNodes[i];
+      nearest_nodes.push_back(validNodeList[node_index]); 
+    }
+    return nearest_nodes;
+}
+
+
+void SkeletonFinder::removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates, vector<NodePtr>& validNodeList) {
+  // sort tooCloseCandidates by distance
+  sort(tooCloseCandidates.begin(), tooCloseCandidates.end(), 
+    [](const TooCloseCandidate &a, const TooCloseCandidate &b) -> bool {
+      return a.distance < b.distance;
+    }
+  );
+  // loop through tooCloseCandidates
+  for (TooCloseCandidate candidate : tooCloseCandidates) {
+    NodePtr node1 = candidate.node1;
+    NodePtr node2 = candidate.node2;
+
+    // IDEA FOR EXTENSION?? 
+    // draw line segment between node1 and node2
+    // extend the line segment to the left and right
+    // check if the path is clear (not close to any other nodes, on either side)
+    // move each as mush as it can
+    // place them where optimal
+    // if it cant, then find somewhere between them to merge
+    // if it cant, then remove one of them
+
+    bool node1_canreplace_node2 = canBeReplacedBy(node1, node2);
+    bool node2_canreplace_node1 = canBeReplacedBy(node2, node1);
+
+    if (node1_canreplace_node2 && node2_canreplace_node1) {
+      // merge the nodes
+      // connection size is not the best weight here, but it is a start
+      double node1_w = node1->connected_Node_ptr.size();
+      double node2_w = node2->connected_Node_ptr.size();
+      mergeNodes(node1, node2, validNodeList, node1_w, node2_w);
+    } else if (node1_canreplace_node2) {
+      killOtherNode(node1, node2, validNodeList);
+    } else if (node2_canreplace_node1) {
+      killOtherNode(node2, node1, validNodeList);
+  }
+  }
+}
+
+
+
+bool SkeletonFinder::canBeReplacedBy(NodePtr node_to_keep, NodePtr node_to_remove) {
+  if (node_to_remove->connected_Node_ptr.size() == 1 && node_to_remove->connected_Node_ptr[0] == node_to_keep)
+    return false;
+  for (NodePtr connected_node : node_to_remove->connected_Node_ptr) {
+    // skip if the connected node is the node_to_keep
+    if (connected_node == node_to_keep)
+      continue;
+
+    // skip if connected node is connected to node_to_keep
+    auto finder = find(node_to_keep->connected_Node_ptr.begin(), node_to_keep->connected_Node_ptr.end(), connected_node);
+    if (finder != node_to_keep->connected_Node_ptr.end())
+      continue;
+
+    if (!checkPathClear(node_to_keep->coord, connected_node->coord))
+      return false;
+  }
+  return true;
+}
+
+
+bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
+  Eigen::Vector3d downwards(0, 0, -1);
+  double base_height = base_pos(2);
+  pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, 2*base_height);
+  if (raycast_result.second == -2) {
+    return false;
+  }
+  double floor_height = raycast_result.first(2); // 0
+  if (floor_height > 2 * _search_margin) // should add floor z dim
+    return false;
+  return true;
+}
+
+
+bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  double length = (pos2 - pos1).norm();
+  double step_length = _resolution;
+
+  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
+  int num_steps = ceil(length / step_length);
+
+  Eigen::Vector3d begin_pos = pos1;
+  for (int i = 0; i < num_steps; i++) {
+    Eigen::Vector3d check_pos = begin_pos + i * step;
+    if (!isValidPosition(check_pos))
+      return false;
+  }
+  if (!isValidPosition(pos2))
+    return false;
+  return true;
+}
+
+
+// not sure about this
+void SkeletonFinder::handleInterSections(vector<NodePtr> validNodeList, double base_height) {
+  // (find intersecting edges, place a nearby node there if possible)
+  // add all intersections and points and remove too close ones
+
+  // checks connections between all the neighbours of all the nerighbours of the node
+  // checks for intersections with node->neighbour connections
+  vector<NodePtr> newNodes;
+  for (NodePtr base_node: validNodeList) {
+    for (NodePtr base_connected_node: base_node->connected_Node_ptr) {
+      for (NodePtr base_connected_other_node: base_node->connected_Node_ptr) {
+        if (base_connected_node == base_connected_other_node)
+          continue;
+        for (NodePtr other_ngb_node: base_connected_other_node->connected_Node_ptr) {
+          // check if other_ngb_node is base_node or base_connected_node
+          if (other_ngb_node == base_node || other_ngb_node == base_connected_node)
+            continue;
+          
+          // check if base_node->base_connected_node intersects with base_connected_other_node->other_ngb_node
+          Eigen::Vector2d base_to_base_connected_start(base_node->coord(0), base_node->coord(1));
+          Eigen::Vector2d base_to_base_connected_end(base_connected_node->coord(0), base_connected_node->coord(1));
+          Eigen::Vector2d other_connected_to_ngb_connected_start(base_connected_other_node->coord(0), base_connected_other_node->coord(1));
+          Eigen::Vector2d other_connected_to_ngb_connected_end(other_ngb_node->coord(0), other_ngb_node->coord(1));
+          Eigen::Vector2d intersection;
+
+          bool has_intersect = calculateIntersection2D(
+            base_to_base_connected_start, base_to_base_connected_end,
+            other_connected_to_ngb_connected_start, other_connected_to_ngb_connected_end,
+            intersection
+          );
+
+          if (has_intersect) {
+            NodePtr newNode = new Node(Eigen::Vector3d(intersection.x(), intersection.y(), base_height), NULL, false);
+            // should check for closeness to other nodes
+            newNodes.push_back(newNode);
+
+            // disconnect base_node and base_connected_node
+            base_node->connected_Node_ptr.erase(
+              remove(base_node->connected_Node_ptr.begin(), base_node->connected_Node_ptr.end(), base_connected_node),
+              base_node->connected_Node_ptr.end()
+            );
+            base_connected_node->connected_Node_ptr.erase(
+              remove(base_connected_node->connected_Node_ptr.begin(), base_connected_node->connected_Node_ptr.end(), base_node),
+              base_connected_node->connected_Node_ptr.end()
+            );
+            // disconnect base_other_connected_node and other_ngb_node
+            base_connected_other_node->connected_Node_ptr.erase(
+              remove(base_connected_other_node->connected_Node_ptr.begin(), base_connected_other_node->connected_Node_ptr.end(), other_ngb_node),
+              base_connected_other_node->connected_Node_ptr.end()
+            );
+            other_ngb_node->connected_Node_ptr.erase(
+              remove(other_ngb_node->connected_Node_ptr.begin(), other_ngb_node->connected_Node_ptr.end(), base_connected_other_node),
+              other_ngb_node->connected_Node_ptr.end()
+            );
+
+            // connect base_node and new node
+            base_node->connected_Node_ptr.push_back(newNode);
+            newNode->connected_Node_ptr.push_back(base_node);
+            // connect new node and base_connected_node
+            base_connected_node->connected_Node_ptr.push_back(newNode);
+            newNode->connected_Node_ptr.push_back(base_connected_node);
+            // base_connected_other node and new node
+            base_connected_other_node->connected_Node_ptr.push_back(newNode);
+            newNode->connected_Node_ptr.push_back(base_connected_other_node);
+            // new node and other_ngb_node
+            newNode->connected_Node_ptr.push_back(other_ngb_node);
+            other_ngb_node->connected_Node_ptr.push_back(newNode);
+          }
+        }
+      }
+    }
+  } 
+}
+
+
+
+bool SkeletonFinder::calculateIntersection2D(const Eigen::Vector2d& p1_start, const Eigen::Vector2d& p1_end,
+                             const Eigen::Vector2d& p2_start, const Eigen::Vector2d& p2_end,
+                             Eigen::Vector2d& intersection) {
+    Eigen::Vector2d dir1 = p1_end - p1_start;
+    Eigen::Vector2d dir2 = p2_end - p2_start;
+    Eigen::Vector2d r = p1_start - p2_start;
+    double denominator = dir1.x() * dir2.y() - dir1.y() * dir2.x();
+
+    // If denominator is zero, the lines are parallel (or collinear)
+    if (denominator == 0.0) {
+        return false;  // No intersection, lines are parallel
+    }
+
+    double t = (r.x() * dir2.y() - r.y() * dir2.x()) / denominator;
+    double u = (r.x() * dir1.y() - r.y() * dir1.x()) / denominator;
+
+    // Check if t and u are within the valid range [0, 1] for both line segments
+    if (t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0) {
+        intersection = p1_start + t * dir1;
+        return true;  // Intersection found
+    }
+    return false;  // No intersection within the segment bounds
+}
+
+
+
+Eigen::MatrixXd SkeletonFinder::getAdjMatrix(vector<NodePtr> validNodeList) {
+
+  // could be optimized: only check for the upper triangle
+
+  int num_nodes = validNodeList.size();
+  Eigen::MatrixXd adjMatrix(num_nodes, num_nodes);
+  for (int i = 0; i < num_nodes; i++) {
+    for (int j = 0; j < num_nodes - i; j++) {
+      NodePtr node1 = validNodeList[i];
+      NodePtr node2 = validNodeList[j];
+
+      if (i == j) {
+        adjMatrix(i, j) = 1;
+        continue;
+      }
+
+      auto finder = find(node1->connected_Node_ptr.begin(), node1->connected_Node_ptr.end(), node2);
+      if (finder != node1->connected_Node_ptr.end()) {
+        adjMatrix(i, j) = 1;
+        adjMatrix(j, i) = 1;
+      } else {
+        adjMatrix(i, j) = 0;
+        adjMatrix(j, i) = 0;
+      }
+    }
+  }
+  return adjMatrix;
+}
+
+
+
+vector<vector<int>> SkeletonFinder::spectralClustering(vector<NodePtr> validNodeList) {
+  Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(validNodeList);
+  cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
+
+  // save adjacency matrix to file (use file easy to open in python)
+  ofstream adjacencyMatrixFile;
+  adjacencyMatrixFile.open("adjacency_matrix.txt");
+  for (int i = 0; i < adjacencyMatrix.rows(); i++) {
+    for (int j = 0; j < adjacencyMatrix.cols(); j++) {
+      adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
+    }
+    adjacencyMatrixFile << endl;
+  }
+
+  int numDims = validNodeList.size();
+  SpectralClustering* spectralClustering = new SpectralClustering(adjacencyMatrix, numDims);
+    
+  bool autotune = false;
+
+  std::vector<std::vector<int>> clusters;
+  cout << "Running spectral clustering..." << endl;
+  if (autotune) {
+      // auto-tuning clustering
+      clusters = spectralClustering->clusterRotate();
+  } else {
+      // how many clusters you want
+      int numClusters = 2;
+      clusters = spectralClustering->clusterKmeans(numClusters);
+  }
+  return clusters;
+}
+
+
+void SkeletonFinder::save_clusters(vector<vector<int>> clusters) {
+  // save clusters with different colors to the same pcd file
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+  for (int i = 0; i < validNodeList.size(); i++) {
+    NodePtr node = validNodeList[i];
+    pcl::PointXYZRGB point;
+    point.x = node->coord(0);
+    point.y = node->coord(1);
+    point.z = node->coord(2);
+    point.r = 255;
+    point.g = 255;
+    point.b = 255;
+    for (int j = 0; j < clusters.size(); j++) {
+      if (find(clusters[j].begin(), clusters[j].end(), i) != clusters[j].end()) {
+        point.r = 255 * (j % 2);
+        point.g = 255 * ((j + 1) % 2);
+        point.b = 255 * ((j + 2) % 2);
+      }
+    }
+    colored_cloud->points.push_back(point);
+  }
+  colored_cloud->width = 1;
+  colored_cloud->height = colored_cloud->points.size();
+  // save the colored cloud
+  pcl::PCDWriter writer;
+  writer.write("colored_cloud.pcd", *colored_cloud);
+  cout << "Colored cloud saved to colored_cloud.pcd" << endl;
+}
