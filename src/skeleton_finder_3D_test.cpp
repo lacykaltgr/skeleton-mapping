@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
   if (downsample > 0) {
     cout << "Downsampling map..." << endl;
     downsampled = skeleton_finder_3D.downsample(cloud_xyz, downsample);
-    cout << "Downsampled map size: " << cloud_xyz->points.size() << endl;
+    cout << "Downsampled map size: " << downsampled->points.size() << endl;
   } else {
     downsampled = cloud_xyz;
   }

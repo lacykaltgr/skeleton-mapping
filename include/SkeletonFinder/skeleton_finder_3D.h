@@ -158,6 +158,7 @@ class SkeletonFinder {
   bool checkPosConnected(NodePtr node_ptr, Eigen::Vector3d pos);
   void genBlackAndWhiteVertices(NodePtr nodePtr);
   void genSamplesOnUnitSphere();
+  void genSamplesOnUnitCircle();
   pair<Eigen::Vector3d, int> raycast(Eigen::Vector3d ray_source, Eigen::Vector3d direction,
                                      double cut_off_length);
   pair<Eigen::Vector3d, int> raycastOnRawMap(Eigen::Vector3d ray_source, Eigen::Vector3d direction,
@@ -199,8 +200,10 @@ class SkeletonFinder {
   pcl::PointCloud<pcl::PointXYZ>::Ptr downsample(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, const double leaf);
 
   void run_processing(const pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud_map);  // Changed parameter type
-  vector<Eigen::Vector3d> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
+  pair<vector<Eigen::Vector3d>, vector<double>> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);
+  pair<vector<Eigen::Vector3d>, vector<double>> run_findpath2(double _path_start_x, double _path_start_y, double _path_start_z,
+                      double _path_target_x, double _path_target_y, double _path_target_z);             
   vector<NodeNearestNeighbors> run_nearestnodes();
   void run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold);
   vector<int> findNearestNodes(NodePtr node);
@@ -217,7 +220,10 @@ class SkeletonFinder {
   void killOtherNode(NodePtr node_to_keep, NodePtr node_to_remove, vector<NodePtr>& validNodeList);
   vector<NodePtr> closestNodes(NodePtr node, double maxDistance, vector<NodePtr>& validNodeList);
   Eigen::MatrixXd getAdjMatrix(vector<NodePtr> validNodeList);
-
+  vector<NodePtr> pathToNodes(vector<Eigen::Vector3d> path);
+  double calculateSafeRadius(NodePtr node, NodePtr connected_node);
+  vector<double> pathRadiuses(vector<Eigen::Vector3d> path);
+  
 
 
   /* operations on the tree */
@@ -225,7 +231,7 @@ class SkeletonFinder {
 
 
   vector<vector<int>> spectralClustering(vector<NodePtr> validNodeList);
-  void save_clusters(vector<vector<int>> clusters);
+  void save_clusters(vector<vector<int>> clusters, vector<NodePtr> validNodeList);
 
 
   /* utility functions */

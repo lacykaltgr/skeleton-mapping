@@ -192,7 +192,7 @@ struct Node {
   vector<FacetPtr> facets;
   vector<FrontierPtr> frontiers;
   vector<NodePtr> connected_Node_ptr;
-  vector<dobule> connected_Node_radius;
+  vector<double> connected_Node_radius;
 
   vector<vec3> sampling_directions;
   vector<vec3> valid_sampling_directions;
@@ -239,6 +239,6 @@ struct PathCandidate {
   }
   PathCandidate() {}
   ~PathCandidate() {}
-}
+};
 
 #endif

@@ -88,6 +88,7 @@ add_executable(skeleton_finder_3D_proc
     src/pre_proc.cpp
     src/post_proc.cpp
     src/utils.cpp
+    src/path_finder.cpp
 
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp

@@ -52,5 +52,21 @@ int main(int argc, char **argv) {
   }
 
   skeleton_finder_3D.run_processing(downsampled);
-  skeleton_finder_3D.run_postprocessing(0.5, 5, 0.5);
+
+  double base_height = config["base_height"].as<double>();
+  double connectionRadius = config["connectionRadius"].as<double>();
+  double tooCloseThreshold = config["tooCloseThreshold"].as<double>();
+
+  skeleton_finder_3D.run_postprocessing(base_height, connectionRadius, tooCloseThreshold);
+
+  double path_start_x = config["path_start"]["x"].as<double>();
+  double path_start_y = config["path_start"]["y"].as<double>();
+  double path_start_z = config["path_start"]["z"].as<double>();
+  double path_target_x = config["path_target"]["x"].as<double>();
+  double path_target_y = config["path_target"]["y"].as<double>();
+  double path_target_z = config["path_target"]["z"].as<double>();
+  skeleton_finder_3D.run_findpath(
+    path_start_x, path_start_y, path_start_z,
+    path_target_x, path_target_y, path_target_z
+  );
 }

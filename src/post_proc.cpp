@@ -124,23 +124,11 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   // calulate radius for each node->neighbour pair
   // --------------------------------------------
-  genSamplesOnUnitCircle(base_height);
+  genSamplesOnUnitCircle();
   for (NodePtr node: validNodeList) {
     for (NodePtr connected_node: node->connected_Node_ptr) {
-      double radius = 0.0;
-      bool safe = true;
-      while (safe) {
-        radius += _resolution;
-        for (Eigen::Vector3d sample: sample_directions) {
-          Eigen::Vector3d start = node->coord + sample * radius;
-          Eigen::Vector3d target = connected_node->coord;
-          if (!checkPathClear(start, target)) {
-            safe = false;
-            break;
-          }
-        } 
-      }
-      node->connected_Node_radius.push_back(radius - _resolution);
+      node->connected_Node_radius.push_back(
+        calculateSafeRadius(node, connected_node));
     }
   }
 
@@ -155,8 +143,12 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
   // spectral clustering
   // -----------------------
   //auto clusters = spectralClustering(validNodeList);
-  //save_clusters(clusters);
+  //save_clusters(clusters, validNodeList);
   //cout << "Number of clusters: " << clusters.size() << endl;
+
+
+  // copy valid graph to NodeList
+  NodeList = validNodeList;
 }
 
 
@@ -279,38 +271,6 @@ bool SkeletonFinder::canBeReplacedBy(NodePtr node_to_keep, NodePtr node_to_remov
   return true;
 }
 
-
-bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
-  Eigen::Vector3d downwards(0, 0, -1);
-  double base_height = base_pos(2);
-  pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, 2*base_height);
-  if (raycast_result.second == -2) {
-    return false;
-  }
-  double floor_height = raycast_result.first(2); // 0
-  if (floor_height > 2 * _search_margin) // should add floor z dim
-    return false;
-  return true;
-}
-
-
-bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
-  double length = (pos2 - pos1).norm();
-  double step_length = _resolution;
-
-  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
-  int num_steps = ceil(length / step_length);
-
-  Eigen::Vector3d begin_pos = pos1;
-  for (int i = 0; i < num_steps; i++) {
-    Eigen::Vector3d check_pos = begin_pos + i * step;
-    if (!isValidPosition(check_pos))
-      return false;
-  }
-  if (!isValidPosition(pos2))
-    return false;
-  return true;
-}
 
 
 // not sure about this
@@ -479,7 +439,7 @@ vector<vector<int>> SkeletonFinder::spectralClustering(vector<NodePtr> validNode
 }
 
 
-void SkeletonFinder::save_clusters(vector<vector<int>> clusters) {
+void SkeletonFinder::save_clusters(vector<vector<int>> clusters, vector<NodePtr> validNodeList) {
   // save clusters with different colors to the same pcd file
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
   for (int i = 0; i < validNodeList.size(); i++) {
