@@ -1,5 +1,4 @@
 #include "SkeletonFinder/skeleton_finder_3D.h"
-#include "SkeletonFinder/spectral/SpectralClustering.h"
 #include <pcl/io/pcd_io.h>
 
 using namespace Eigen;
@@ -405,7 +404,7 @@ Eigen::MatrixXd SkeletonFinder::getAdjMatrix(vector<NodePtr> validNodeList) {
 }
 
 
-
+/*
 vector<vector<int>> SkeletonFinder::spectralClustering(vector<NodePtr> validNodeList) {
   Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(validNodeList);
   cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
@@ -437,7 +436,7 @@ vector<vector<int>> SkeletonFinder::spectralClustering(vector<NodePtr> validNode
   }
   return clusters;
 }
-
+*/
 
 void SkeletonFinder::save_clusters(vector<vector<int>> clusters, vector<NodePtr> validNodeList) {
   // save clusters with different colors to the same pcd file

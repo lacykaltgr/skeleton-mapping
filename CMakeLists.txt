@@ -89,13 +89,8 @@ add_executable(skeleton_finder_3D_proc
     src/post_proc.cpp
     src/utils.cpp
     src/path_finder.cpp
-
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
-    utils/spectral_clustering/ClusterRotate.cpp
-    utils/spectral_clustering/Evrot.cpp
-    utils/spectral_clustering/Kmeans.cpp
-    utils/spectral_clustering/SpectralClustering.cpp
 )
 
 target_link_libraries(skeleton_finder_3D_proc
@@ -123,9 +118,13 @@ target_link_libraries(skeleton_finder_3D_proc
 
 
 add_library(SkeletonFinder
-    src/skeleton_finder_3D_test.cpp
+    src/skeleton_finder_3D_proc.cpp
     src/skeleton_finder_3D.cpp
     src/io.cpp
+    src/pre_proc.cpp
+    src/post_proc.cpp
+    src/utils.cpp
+    src/path_finder.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
 )
