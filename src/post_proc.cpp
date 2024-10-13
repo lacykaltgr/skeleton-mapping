@@ -30,20 +30,19 @@ IDEA: store for every neighbour from what radius of the base node is the path al
 
 
 void SkeletonFinder::run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold) {
+  nodes_pcl->clear();
 
-  auto twod_nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
   for (NodePtr node: NodeList) {
     node->coord = Eigen::Vector3d(node->coord(0), node->coord(1), base_height);
-    twod_nodes_pcl->points.push_back(
+    nodes_pcl->points.push_back(
       pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
     );
   }
 
   vector<NodePtr> validNodeList;
-  auto valid_nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
 
   // merge / remove nodes which are too close to each other
-  kdtreeForNodes.setInputCloud(twod_nodes_pcl);
+  kdtreeForNodes.setInputCloud(nodes_pcl);
   vector<TooCloseCandidate> tooCloseCandidates;
   for (NodePtr node: NodeList) {
     
@@ -73,6 +72,7 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   cout << "Number of nodes after removing close nodes: " << NodeList.size() << endl;
 
+  nodes_pcl->clear();
 
   // initial purge
   for (NodePtr node : NodeList) {
@@ -84,7 +84,7 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
     if (isValidPosition(node->coord)) {
       
       validNodeList.push_back(node);
-      valid_nodes_pcl->points.push_back(
+      nodes_pcl->points.push_back(
         pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
       );
     }
@@ -94,7 +94,7 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   // add edges where the path is clear
   int counter = 0;
-  kdtreeForNodes.setInputCloud(valid_nodes_pcl);
+  kdtreeForNodes.setInputCloud(nodes_pcl);
   for (NodePtr node : validNodeList) {
     // radius search on valid nodes
     vector<NodePtr> nearest_nodes = closestNodes(node, connectionRadius, validNodeList);
@@ -102,6 +102,10 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
     // add edges where the path is clear
     for (NodePtr nearest_node : nearest_nodes) {
       if (nearest_node == node)
+        continue;
+
+      auto finder1 = find(validNodeList.begin(), validNodeList.end(), nearest_node);
+      if (finder1 == validNodeList.end())
         continue;
       
       // check if the edge already exists
@@ -123,12 +127,49 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   // calulate radius for each node->neighbour pair
   // --------------------------------------------
-  genSamplesOnUnitCircle();
-  for (NodePtr node: validNodeList) {
-    for (NodePtr connected_node: node->connected_Node_ptr) {
-      node->connected_Node_radius.push_back(
-        calculateSafeRadius(node, connected_node));
+  //genSamplesOnUnitCircle();
+  //for (NodePtr node: validNodeList) {
+  //  for (NodePtr connected_node: node->connected_Node_ptr) {
+  //    node->connected_Node_radius.push_back(
+  //      calculateSafeRadius(node, connected_node));
+  //  }
+  //}
+
+  /*
+  // save valid nodes to file
+  valid_nodes_pcl->height = 1;
+  valid_nodes_pcl->width = valid_nodes_pcl->points.size();
+  pcl::io::savePCDFileASCII("/workspace/semantic_navigation_ws/src/global_planner/resource/nodes_demo.pcd", *valid_nodes_pcl);
+  cout << "Nodes saved to file." << endl;
+
+  std::fstream fs;
+  fs.open("/workspace/semantic_navigation_ws/src/global_planner/resource/connections_demo.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
+  // save connections to file
+  for (NodePtr cur_node : validNodeList) {
+    for (NodePtr connect_node : cur_node->connected_Node_ptr) {
+      auto finder = find(validNodeList.begin(), validNodeList.end(), connect_node);
+      if (finder != validNodeList.end()) {
+        fs << cur_node->coord(0) << " " << cur_node->coord(1) << " " << cur_node->coord(2) << "\n";
+        fs << connect_node->coord(0) << " " << connect_node->coord(1) << " " << connect_node->coord(2) << "\n";
+        fs << "\n";
+      }
     }
+  }
+
+  cout << "Connections saved to file." << endl;
+  */
+
+  Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(validNodeList);
+  cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
+
+  // save adjacency matrix to file (use file easy to open in python)
+  ofstream adjacencyMatrixFile;
+  adjacencyMatrixFile.open("adjacency_matrix.txt");
+  for (int i = 0; i < adjacencyMatrix.rows(); i++) {
+    for (int j = 0; j < adjacencyMatrix.cols(); j++) {
+      adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
+    }
+    adjacencyMatrixFile << endl;
   }
 
 
@@ -144,10 +185,22 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
   //auto clusters = spectralClustering(validNodeList);
   //save_clusters(clusters, validNodeList);
   //cout << "Number of clusters: " << clusters.size() << endl;
-
+  cout << "finalizing post-processing" << endl;
 
   // copy valid graph to NodeList
-  NodeList = validNodeList;
+  NodeList.clear();
+  cout << "nodelist cleared" << endl;
+  nodes_pcl->clear();
+  cout << "nodes_pcl cleared" << endl;
+
+  for (NodePtr node : validNodeList) {
+    NodeList.push_back(node);
+    nodes_pcl->points.push_back(
+      pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
+    );
+  }
+
+  cout << "Post-processing finished." << endl;
 }
 
 
@@ -186,7 +239,7 @@ void SkeletonFinder::killOtherNode(NodePtr node_to_keep, NodePtr node_to_remove,
   }
 
   // remove node_to_remove from validNodeList
-  validNodeList.erase(
+  NodeList.erase(
     remove(validNodeList.begin(), validNodeList.end(), node_to_remove),
     validNodeList.end()
   );
@@ -245,7 +298,9 @@ void SkeletonFinder::removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandi
       killOtherNode(node1, node2, validNodeList);
     } else if (node2_canreplace_node1) {
       killOtherNode(node2, node1, validNodeList);
-  }
+    } else { //NOTE:: added this to always remove close nodes
+      killOtherNode(node1, node2, validNodeList);
+    }
   }
 }
 

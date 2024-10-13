@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
     double leaf_size = std::stod(argv[3]);
 
     // Load the input PCD file
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    if (pcl::io::loadPCDFile<pcl::PointXYZ>(input_file, *cloud) == -1) {
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(input_file, *cloud) == -1) {
         std::cerr << "Error: Couldn't read input PCD file " << input_file << std::endl;
         return -1;
     }
@@ -26,10 +26,10 @@ int main(int argc, char** argv) {
     std::cout << "Loaded " << cloud->width * cloud->height << " data points from " << input_file << std::endl;
 
     // Downsample the point cloud
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::VoxelGrid<pcl::PointXYZRGB> sor;
     sor.setInputCloud(cloud);
-    sor.setLeafSize(leaf, leaf, leaf);
+    sor.setLeafSize(leaf_size, leaf_size, leaf_size);
     sor.filter(*cloud_filtered);
 
     // Save the downsampled point cloud to output file

@@ -54,8 +54,8 @@ int main(int argc, char **argv) {
   skeleton_finder_3D.run_processing(downsampled);
 
   double base_height = config["base_height"].as<double>();
-  double connectionRadius = config["connectionRadius"].as<double>();
-  double tooCloseThreshold = config["tooCloseThreshold"].as<double>();
+  double connectionRadius = config["connection_radius"].as<double>();
+  double tooCloseThreshold = config["too_close_radius"].as<double>();
 
   skeleton_finder_3D.run_postprocessing(base_height, connectionRadius, tooCloseThreshold);
 

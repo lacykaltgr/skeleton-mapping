@@ -24,7 +24,14 @@ pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath(
     cout << "Path length: " << path_length << endl;
   }
 
-  pair<vector<Eigen::Vector3d>, vector<double>> result(path, pathRadiuses(path));
+  vector<double> path_radiuses;
+  for (size_t i = 0; i < path.size() - 1; i++) {
+    path_radiuses.push_back(0.5);
+  }
+
+  pair<vector<Eigen::Vector3d>, vector<double>> result(path, path_radiuses);
+
+  //pair<vector<Eigen::Vector3d>, vector<double>> result(path, pathRadiuses(path));
   return result;
 }
 
@@ -54,7 +61,12 @@ pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath2(
     new_path.push_back(path[achieved]);
     this_waypoint = path[achieved];
   }
-  pair<vector<Eigen::Vector3d>, vector<double>> result(new_path, pathRadiuses(new_path));
+  vector<double> path_radiuses;
+  for (size_t i = 0; i < new_path.size() - 1; i++) {
+    path_radiuses.push_back(0.2);
+  }
+
+  pair<vector<Eigen::Vector3d>, vector<double>> result(new_path, path_radiuses);
   return result;  
 }
 
@@ -265,14 +277,16 @@ bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) 
 
 
 bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
+  double floor_height_gt = 0.0;
   Eigen::Vector3d downwards(0, 0, -1);
-  double base_height = base_pos(2);
-  pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, 2*base_height);
+  //double base_height = base_pos(2);
+  Eigen::Vector3d start(base_pos(0), base_pos(1), floor_height_gt + 1.2);
+  pair<Vector3d, int> raycast_result = raycastOnRawMap(start, downwards, 2);
   if (raycast_result.second == -2) {
     return false;
   }
   double floor_height = raycast_result.first(2); // 0
-  if (floor_height > 2 * _search_margin) // should add floor z dim
+  if (floor_height > floor_height_gt+0.6) // should add floor z dim
     return false;
   return true;
 }

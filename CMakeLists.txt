@@ -78,6 +78,15 @@ target_link_libraries(map_merger
     ${PCL_LIBRARIES}
 )
 
+# MAP merger
+add_executable(downsample
+    utils/downsample.cpp
+)
+
+target_link_libraries(downsample
+    ${PCL_LIBRARIES}
+)
+
 
 
 # Skeleton finder 3D test
@@ -118,7 +127,7 @@ target_link_libraries(skeleton_finder_3D_proc
 
 
 add_library(SkeletonFinder
-    src/skeleton_finder_3D_proc.cpp
+    src/skeleton_finder_3D_test.cpp
     src/skeleton_finder_3D.cpp
     src/io.cpp
     src/pre_proc.cpp

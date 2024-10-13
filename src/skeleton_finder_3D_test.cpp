@@ -41,17 +41,17 @@ int main(int argc, char **argv) {
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::copyPointCloud(*cloud, *cloud_xyz);
 
-  double downsample = config["downsample"].as<double>();
-  pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled;
-  if (downsample > 0) {
-    cout << "Downsampling map..." << endl;
-    downsampled = skeleton_finder_3D.downsample(cloud_xyz, downsample);
-    cout << "Downsampled map size: " << downsampled->points.size() << endl;
-  } else {
-    downsampled = cloud_xyz;
-  }
+  //double downsample = config["downsample"].as<double>();
+  //pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled;
+  //if (downsample > 0) {
+  //  cout << "Downsampling map..." << endl;
+  //  downsampled = skeleton_finder_3D.downsample(cloud_xyz, downsample);
+  //  cout << "Downsampled map size: " << downsampled->points.size() << endl;
+  //} else {
+  //  downsampled = cloud_xyz;
+  //}
 
-  skeleton_finder_3D.run_processing(downsampled);
+  skeleton_finder_3D.run_processing(cloud_xyz);
 
   double path_start_x = config["path_start"]["x"].as<double>();
   double path_start_y = config["path_start"]["y"].as<double>();

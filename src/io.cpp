@@ -17,11 +17,11 @@ void SkeletonFinder::saveToFile(const std::string& filename, const std::string& 
 
 void SkeletonFinder::visualization() {
     //visStart();
-    visNodesAndVertices();
+    //visNodesAndVertices();
     //visPolygons();
     //visFrontiers();
     //visMap();
-    visConnections();
+    //visConnections();
 }
 
 void SkeletonFinder::visNodesAndVertices() {
