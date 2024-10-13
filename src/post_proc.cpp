@@ -164,7 +164,7 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   // save adjacency matrix to file (use file easy to open in python)
   ofstream adjacencyMatrixFile;
-  adjacencyMatrixFile.open("adjacency_matrix.txt");
+  adjacencyMatrixFile.open("/workspace/data_proc/data18/adjacency_matrix.txt");
   for (int i = 0; i < adjacencyMatrix.rows(); i++) {
     for (int j = 0; j < adjacencyMatrix.cols(); j++) {
       adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
