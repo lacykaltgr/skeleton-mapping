@@ -198,6 +198,7 @@ class SkeletonFinder {
   bool checkWithinBbx(Eigen::Vector3d pos);
   void addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map);
   pcl::PointCloud<pcl::PointXYZ>::Ptr downsample(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, const double leaf);
+  void findBoundingBox(const pcl::PointCloud<pcl::PointXYZ>::Ptr map);
 
   void run_processing(const pcl::PointCloud<pcl::PointXYZ>::Ptr pointcloud_map);  // Changed parameter type
   pair<vector<Eigen::Vector3d>, vector<double>> run_findpath(double _path_start_x, double _path_start_y, double _path_start_z,

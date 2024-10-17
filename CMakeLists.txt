@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "-std=c++17 -march=native ${CMAKE_CXX_FLAGS} -g -O3 -Wall")
 
 # Find packages
 find_package(Eigen3 REQUIRED)
-find_package(PCL REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common io filters)
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -29,6 +29,7 @@ include_directories(
 link_directories(
     ${PCL_LIBRARY_DIRS}
 )
+add_definitions(${PCL_DEFINITIONS})
 
 # Omni2Colmap
 add_executable(omni2colmap
@@ -61,7 +62,6 @@ add_executable(skeleton_finder_3D_test
     utils/A_star/A_star.cpp
     src/pre_proc.cpp
     src/path_finder.cpp
-    src/utils.cpp
 )
 
 target_link_libraries(skeleton_finder_3D_test
@@ -87,6 +87,22 @@ target_link_libraries(downsample
     ${PCL_LIBRARIES}
 )
 
+add_executable(filter
+    utils/filter.cpp
+)
+
+target_link_libraries(filter
+    ${PCL_LIBRARIES}
+    pcl_filters
+)
+
+add_executable(z_thresh
+    utils/cut_pcd.cpp
+)
+
+target_link_libraries(z_thresh
+    ${PCL_LIBRARIES}
+)
 
 
 # Skeleton finder 3D test
@@ -96,7 +112,6 @@ add_executable(skeleton_finder_3D_proc
     src/io.cpp
     src/pre_proc.cpp
     src/post_proc.cpp
-    src/utils.cpp
     src/path_finder.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
@@ -127,7 +142,6 @@ add_library(SkeletonFinder
     src/io.cpp
     src/pre_proc.cpp
     src/post_proc.cpp
-    src/utils.cpp
     src/path_finder.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp

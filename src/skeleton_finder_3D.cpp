@@ -1642,29 +1642,3 @@ bool SkeletonFinder::checkWithinBbx(Eigen::Vector3d pos) {
          pos(0) <= _x_max && pos(1) <= _y_max && pos(2) <= _z_max;
 }
 
-void SkeletonFinder::addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) {
-  double x_length = _x_max - _x_min;
-  double y_length = _y_max - _y_min;
-  // double z_length = _z_max - _z_min;
-  int x_num = ceil(x_length / _resolution) + 1;
-  int y_num = ceil(y_length / _resolution) + 1;
-  // int z_num = ceil(z_length / _resolution) + 1;
-
-  if (_is_simulation) { // Add ceiling and floor to search map
-    for (int i = 0; i < x_num; i++) {
-      for (int j = 0; j < y_num; j++) {
-        map->points.push_back(pcl::PointXYZ(_x_min + _resolution * i,
-                                           _y_min + _resolution * j, _z_min));
-        map->points.push_back(pcl::PointXYZ(_x_min + _resolution * i,
-                                           _y_min + _resolution * j, _z_max));
-      }
-    }
-  } else { // Add only ceiling to search map
-    for (int i = 0; i < x_num; i++) {
-      for (int j = 0; j < y_num; j++) {
-        map->points.push_back(pcl::PointXYZ(_x_min + _resolution * i,
-                                           _y_min + _resolution * j, _z_max));
-      }
-    }
-  }
-}

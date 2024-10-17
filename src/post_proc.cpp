@@ -133,17 +133,16 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
   //    node->connected_Node_radius.push_back(
   //      calculateSafeRadius(node, connected_node));
   //  }
-  //}
-
-  /*
+  
+  
   // save valid nodes to file
-  valid_nodes_pcl->height = 1;
-  valid_nodes_pcl->width = valid_nodes_pcl->points.size();
-  pcl::io::savePCDFileASCII("/workspace/semantic_navigation_ws/src/global_planner/resource/nodes_demo.pcd", *valid_nodes_pcl);
+  nodes_pcl->height = 1;
+  nodes_pcl->width = nodes_pcl->points.size();
+  pcl::io::savePCDFileASCII("/workspace/data_proc/data19/nodes_demo.pcd", *nodes_pcl);
   cout << "Nodes saved to file." << endl;
 
   std::fstream fs;
-  fs.open("/workspace/semantic_navigation_ws/src/global_planner/resource/connections_demo.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
+  fs.open("/workspace/data_proc/data19/connections_demo.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
   // save connections to file
   for (NodePtr cur_node : validNodeList) {
     for (NodePtr connect_node : cur_node->connected_Node_ptr) {
@@ -157,14 +156,14 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
   }
 
   cout << "Connections saved to file." << endl;
-  */
+
 
   Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(validNodeList);
   cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
 
   // save adjacency matrix to file (use file easy to open in python)
   ofstream adjacencyMatrixFile;
-  adjacencyMatrixFile.open("/workspace/data_proc/data18/adjacency_matrix.txt");
+  adjacencyMatrixFile.open("/workspace/data_proc/data19/adjacency_matrix.txt");
   for (int i = 0; i < adjacencyMatrix.rows(); i++) {
     for (int j = 0; j < adjacencyMatrix.cols(); j++) {
       adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
