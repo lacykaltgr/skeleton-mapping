@@ -1,10 +1,10 @@
 # Bounding box
-x_min: -25
-x_max: 7
-y_min: -28
-y_max: 60
+x_min: -1
+x_max: -1
+y_min: -1
+y_max: -1
 z_min: -1
-z_max: 5
+z_max: -1
 
 base_height: 0.6
 base_radius: 0.5
@@ -47,3 +47,4 @@ max_height_diff: 1.5
 sampling_density: 100
 max_facets_grouped: 10
 resolution: 0.1
+

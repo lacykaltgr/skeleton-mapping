@@ -104,6 +104,14 @@ target_link_libraries(z_thresh
     ${PCL_LIBRARIES}
 )
 
+add_executable(cut_bbx
+    utils/cut_bbx.cpp
+)
+
+target_link_libraries(cut_bbx
+    ${PCL_LIBRARIES}
+)
+
 
 # Skeleton finder 3D test
 add_executable(skeleton_finder_3D_proc

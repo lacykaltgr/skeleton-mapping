@@ -27,70 +27,52 @@ IDEA: store for every neighbour from what radius of the base node is the path al
 
 */
 
-
-
-void SkeletonFinder::run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold) {
+void SkeletonFinder::fillNodesPcl(vector<NodePtr> nodeList, double base_radius=-1) {
+  bool checkForCollision = base_radius > 0;
+  vector<NodePtr> invalidNodeList;
   nodes_pcl->clear();
+  for (NodePtr node: nodeList) {
 
-  for (NodePtr node: NodeList) {
-    node->coord = Eigen::Vector3d(node->coord(0), node->coord(1), base_height);
+    if (checkForCollision) {
+      node->connected_Node_ptr.clear();
+    }
+
+    if (checkForCollision && collisionCheck(node->coord, base_radius)) {
+      // remove node from NodeList
+      invalidNodeList.push_back(node);
+      continue;
+    }
+
     nodes_pcl->points.push_back(
       pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
     );
   }
-
-  vector<NodePtr> validNodeList;
-
-  // merge / remove nodes which are too close to each other
-  kdtreeForNodes.setInputCloud(nodes_pcl);
-  vector<TooCloseCandidate> tooCloseCandidates;
-  for (NodePtr node: NodeList) {
-    
-    vector<NodePtr> nodes_too_close = closestNodes(node, tooCloseThreshold, NodeList);
-
-    for (NodePtr nearest_node: nodes_too_close) {
-      if (nearest_node == node)
-        continue;
-      bool added = false;
-      for (TooCloseCandidate candidate: tooCloseCandidates) {
-        if (candidate.node1 == nearest_node && candidate.node2 == node) {
-          added = true;
-          break;
-        }
+  
+  if (checkForCollision && invalidNodeList.size() > 0) {
+    for (NodePtr node: invalidNodeList) {
+      auto finder = find(nodeList.begin(), nodeList.end(), node);
+      if (finder != nodeList.end()) {
+        nodeList.erase(finder);
       }
-      if (added)
-        continue;
-      TooCloseCandidate candidate;
-      candidate.node1 = node;
-      candidate.node2 = nearest_node;
-      candidate.distance = getDis(node->coord, nearest_node->coord);
-      tooCloseCandidates.push_back(candidate);
     }
+  } 
+}
+
+
+
+void SkeletonFinder::run_postprocessing(double base_height, double base_radius, double connectionRadius, double tooCloseThreshold) {
+  
+  fillNodesPcl(NodeList);
+
+  cout << "Number of nodes before removing too close nodes: " << NodeList.size() << endl;
+  for (int nRemoved = removeTooCloseNodes(tooCloseThreshold); nRemoved > 0;  nRemoved = removeTooCloseNodes(tooCloseThreshold)) {
+    cout << "Too close nodes removed: " << nRemoved << endl;
   }
-  // based on how it improves the graph
-  removeTooCloseNodes(tooCloseCandidates, NodeList);
+  cout << "Number of nodes after removing too close nodes: " << NodeList.size() << endl;
 
-  cout << "Number of nodes after removing close nodes: " << NodeList.size() << endl;
+  fillNodesPcl(NodeList, base_radius);
 
-  nodes_pcl->clear();
-
-  // initial purge
-  for (NodePtr node : NodeList) {
-    // remove all edges from the graph
-    node->connected_Node_ptr.clear();
-
-    // remove nodes which are above/too close to objects
-    //Eigen::Vector3d base_pos(node->coord(0), node->coord(1), base_height);
-    if (isValidPosition(node->coord)) {
-      
-      validNodeList.push_back(node);
-      nodes_pcl->points.push_back(
-        pcl::PointXYZ(node->coord(0), node->coord(1), node->coord(2))
-      );
-    }
-  }
-
-  cout << "Number of valid nodes: " << validNodeList.size() << endl;
+  cout << "Number of valid nodes: " << NodeList.size() << endl;
 
   // add edges where the path is clear
   int counter = 0;
@@ -138,11 +120,11 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
   // save valid nodes to file
   nodes_pcl->height = 1;
   nodes_pcl->width = nodes_pcl->points.size();
-  pcl::io::savePCDFileASCII("/workspace/data_proc/data19/nodes_demo.pcd", *nodes_pcl);
+  pcl::io::savePCDFileASCII("/workspace/data_proc/data20/nodes_demo.pcd", *nodes_pcl);
   cout << "Nodes saved to file." << endl;
 
   std::fstream fs;
-  fs.open("/workspace/data_proc/data19/connections_demo.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
+  fs.open("/workspace/data_proc/data20/connections_demo.txt", std::fstream::in | std::fstream::out | std::fstream::trunc);
   // save connections to file
   for (NodePtr cur_node : validNodeList) {
     for (NodePtr connect_node : cur_node->connected_Node_ptr) {
@@ -163,7 +145,7 @@ void SkeletonFinder::run_postprocessing(double base_height, double connectionRad
 
   // save adjacency matrix to file (use file easy to open in python)
   ofstream adjacencyMatrixFile;
-  adjacencyMatrixFile.open("/workspace/data_proc/data19/adjacency_matrix.txt");
+  adjacencyMatrixFile.open("/workspace/data_proc/data20/adjacency_matrix.txt");
   for (int i = 0; i < adjacencyMatrix.rows(); i++) {
     for (int j = 0; j < adjacencyMatrix.cols(); j++) {
       adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
@@ -263,7 +245,33 @@ vector<NodePtr> SkeletonFinder::closestNodes(NodePtr node, double maxDistance, v
 }
 
 
-void SkeletonFinder::removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandidates, vector<NodePtr>& validNodeList) {
+int SkeletonFinder::removeTooCloseNodes(double tooCloseThreshold) {
+  kdtreeForNodes.setInputCloud(nodes_pcl);
+  vector<TooCloseCandidate> tooCloseCandidates;
+  for (NodePtr node: NodeList) {
+    
+    vector<NodePtr> nodes_too_close = closestNodes(node, tooCloseThreshold, NodeList);
+
+    for (NodePtr nearest_node: nodes_too_close) {
+      if (nearest_node == node)
+        continue;
+      bool added = false;
+      for (TooCloseCandidate candidate: tooCloseCandidates) {
+        if (candidate.node1 == nearest_node && candidate.node2 == node) {
+          added = true;
+          break;
+        }
+      }
+      if (added)
+        continue;
+      TooCloseCandidate candidate;
+      candidate.node1 = node;
+      candidate.node2 = nearest_node;
+      candidate.distance = getDis(node->coord, nearest_node->coord);
+      tooCloseCandidates.push_back(candidate);
+    }
+  }
+
   // sort tooCloseCandidates by distance
   sort(tooCloseCandidates.begin(), tooCloseCandidates.end(), 
     [](const TooCloseCandidate &a, const TooCloseCandidate &b) -> bool {
@@ -292,15 +300,17 @@ void SkeletonFinder::removeTooCloseNodes(vector<TooCloseCandidate> tooCloseCandi
       // connection size is not the best weight here, but it is a start
       double node1_w = node1->connected_Node_ptr.size();
       double node2_w = node2->connected_Node_ptr.size();
-      mergeNodes(node1, node2, validNodeList, node1_w, node2_w);
+      mergeNodes(node1, node2, NodeList, node1_w, node2_w);
     } else if (node1_canreplace_node2) {
-      killOtherNode(node1, node2, validNodeList);
+      killOtherNode(node1, node2, NodeList);
     } else if (node2_canreplace_node1) {
-      killOtherNode(node2, node1, validNodeList);
+      killOtherNode(node2, node1, NodeList);
     } else { //NOTE:: added this to always remove close nodes
-      killOtherNode(node1, node2, validNodeList);
+      killOtherNode(node1, node2, NodeList);
     }
   }
+
+  return tooCloseCandidates.size();
 }
 
 
@@ -433,9 +443,13 @@ Eigen::MatrixXd SkeletonFinder::getAdjMatrix(vector<NodePtr> validNodeList) {
   // could be optimized: only check for the upper triangle
 
   int num_nodes = validNodeList.size();
+  cout << "Number of valid nodes: " << num_nodes << endl;
   Eigen::MatrixXd adjMatrix(num_nodes, num_nodes);
+  // fill the adjacency matrix with 0s
+  adjMatrix.setZero();
+
   for (int i = 0; i < num_nodes; i++) {
-    for (int j = 0; j < num_nodes - i; j++) {
+    for (int j = 0; j < num_nodes; j++) {
       NodePtr node1 = validNodeList[i];
       NodePtr node2 = validNodeList[j];
 
@@ -448,75 +462,13 @@ Eigen::MatrixXd SkeletonFinder::getAdjMatrix(vector<NodePtr> validNodeList) {
       if (finder != node1->connected_Node_ptr.end()) {
         adjMatrix(i, j) = 1;
         adjMatrix(j, i) = 1;
-      } else {
-        adjMatrix(i, j) = 0;
-        adjMatrix(j, i) = 0;
+      //} else {
+      //  adjMatrix(i, j) = 0;
+      //  adjMatrix(j, i) = 0;
+      //}
       }
     }
   }
   return adjMatrix;
 }
 
-
-/*
-vector<vector<int>> SkeletonFinder::spectralClustering(vector<NodePtr> validNodeList) {
-  Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(validNodeList);
-  cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
-
-  // save adjacency matrix to file (use file easy to open in python)
-  ofstream adjacencyMatrixFile;
-  adjacencyMatrixFile.open("adjacency_matrix.txt");
-  for (int i = 0; i < adjacencyMatrix.rows(); i++) {
-    for (int j = 0; j < adjacencyMatrix.cols(); j++) {
-      adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
-    }
-    adjacencyMatrixFile << endl;
-  }
-
-  int numDims = validNodeList.size();
-  SpectralClustering* spectralClustering = new SpectralClustering(adjacencyMatrix, numDims);
-    
-  bool autotune = false;
-
-  std::vector<std::vector<int>> clusters;
-  cout << "Running spectral clustering..." << endl;
-  if (autotune) {
-      // auto-tuning clustering
-      clusters = spectralClustering->clusterRotate();
-  } else {
-      // how many clusters you want
-      int numClusters = 2;
-      clusters = spectralClustering->clusterKmeans(numClusters);
-  }
-  return clusters;
-}
-*/
-
-void SkeletonFinder::save_clusters(vector<vector<int>> clusters, vector<NodePtr> validNodeList) {
-  // save clusters with different colors to the same pcd file
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-  for (int i = 0; i < validNodeList.size(); i++) {
-    NodePtr node = validNodeList[i];
-    pcl::PointXYZRGB point;
-    point.x = node->coord(0);
-    point.y = node->coord(1);
-    point.z = node->coord(2);
-    point.r = 255;
-    point.g = 255;
-    point.b = 255;
-    for (int j = 0; j < clusters.size(); j++) {
-      if (find(clusters[j].begin(), clusters[j].end(), i) != clusters[j].end()) {
-        point.r = 255 * (j % 2);
-        point.g = 255 * ((j + 1) % 2);
-        point.b = 255 * ((j + 2) % 2);
-      }
-    }
-    colored_cloud->points.push_back(point);
-  }
-  colored_cloud->width = 1;
-  colored_cloud->height = colored_cloud->points.size();
-  // save the colored cloud
-  pcl::PCDWriter writer;
-  writer.write("colored_cloud.pcd", *colored_cloud);
-  cout << "Colored cloud saved to colored_cloud.pcd" << endl;
-}

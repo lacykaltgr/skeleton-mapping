@@ -60,6 +60,9 @@ void SkeletonFinder::addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) 
   int y_num = ceil(y_length / _resolution) + 1;
   // int z_num = ceil(z_length / _resolution) + 1;
 
+  /*
+  // Add ceiling and/or floor to the map
+
   if (_is_simulation) { // Add ceiling and floor to search map
     for (int i = 0; i < x_num; i++) {
       for (int j = 0; j < y_num; j++) {
@@ -77,6 +80,7 @@ void SkeletonFinder::addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) 
       }
     }
   }
+  */
 }
 
 
@@ -98,14 +102,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr SkeletonFinder::downsample(pcl::PointCloud<p
 void SkeletonFinder::setParam(
   double x_min, double x_max, double y_min, double y_max, double z_min, double z_max,
   double start_x, double start_y, double start_z,
-  int map_representation, bool is_simulation,
   double frontier_creation_threshold, double frontier_jump_threshold, double frontier_split_threshold,
   int min_flowback_creation_threshold, double min_flowback_creation_radius_threshold,
   double min_node_radius, double search_margin, double max_ray_length,
   double max_expansion_ray_length, double max_height_diff, int sampling_density,
-  int max_facets_grouped, double resolution,
-  bool debug_mode, bool bad_loop,
-  bool visualize_final_result_only, bool visualize_all, bool visualize_outwards_normal,
+  int max_facets_grouped, double resolution, 
+  bool bad_loop,
   bool visualize_nbhd_facets, bool visualize_black_polygon
 ) {
   _x_min = x_min;
@@ -119,7 +121,6 @@ void SkeletonFinder::setParam(
   _start_z = start_z;
 
   _map_representation = map_representation;
-  _is_simulation = is_simulation;
   _frontier_creation_threshold = frontier_creation_threshold;
   _frontier_jump_threshold = frontier_jump_threshold;
   _frontier_split_threshold = frontier_split_threshold;
@@ -138,9 +139,6 @@ void SkeletonFinder::setParam(
   _debug_mode = debug_mode;
   _bad_loop = bad_loop;
 
-  _visualize_final_result_only = visualize_final_result_only;
-  _visualize_all = visualize_all;
-  _visualize_outwards_normal = visualize_outwards_normal;
   _visualize_nbhd_facets = visualize_nbhd_facets;
   _visualize_black_polygon = visualize_black_polygon;
 }

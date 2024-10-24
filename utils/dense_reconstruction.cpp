@@ -71,10 +71,16 @@ int main(int argc, char **argv)
         std::string input_directory = argv[1];
         std::string output_path = argv[2];  
 
-        float min_z = 0.1f, max_z = 20.0f;
+        float min_z = 0.2f, max_z = 20.0f;
         int pixel_step_size = 4, median_filter_size = 0;
         int image_step_size = 5;
 
+        if (argc > 3) {
+            pixel_step_size = std::stoi(argv[3]);
+        }
+        if (argc > 4) {
+            min_z = std::stof(argv[4]);
+        }
 
         Camera camera = readCameraInfo(input_directory + "/udist_camera_matrix.json");
 

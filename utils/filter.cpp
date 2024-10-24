@@ -22,15 +22,15 @@ int main(int argc, char** argv) {
     }
 
     // Load input PCD file
-    pcl::PointCloud<PointT>::Ptr cloud_filtered(new pcl::PointCloud<PointT>);
-    if (pcl::io::loadPCDFile<PointT>(argv[1], *cloud_filtered) == -1) {
+    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>);
+    if (pcl::io::loadPCDFile<PointT>(argv[1], *cloud) == -1) {
         PCL_ERROR("Couldn't read the input PCD file\n");
         return -1;
     }
-    std::cout << "Loaded point cloud with " << cloud_filtered->size() << " points." << std::endl;
+    std::cout << "Loaded point cloud with " << cloud->size() << " points." << std::endl;
 
-    int original_size = cloud_filtered->size();
-    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>);
+    int original_size = cloud->size();
+    pcl::PointCloud<PointT>::Ptr cloud_filtered(new pcl::PointCloud<PointT>);
 
 
     /*
@@ -45,28 +45,28 @@ int main(int argc, char** argv) {
 
     // Step 2: Statistical Outlier Removal
     pcl::StatisticalOutlierRemoval<PointT> sor;
-    sor.setInputCloud(cloud_filtered);
+    sor.setInputCloud(cloud);
     sor.setMeanK(50);
-    sor.setStddevMulThresh(1.0);
-    sor.filter(*cloud);
-    printPointReduction("StatisticalOutlierRemoval", original_size, cloud->size());
-    original_size = cloud->size();
+    sor.setStddevMulThresh(2);
+    sor.filter(*cloud_filtered);
+    printPointReduction("StatisticalOutlierRemoval", original_size, cloud_filtered->size());
+    original_size = cloud_filtered->size();
 
     // Step 3: Radius Outlier Removal
     pcl::RadiusOutlierRemoval<PointT> ror;
-    ror.setInputCloud(cloud);
+    ror.setInputCloud(cloud_filtered);
     ror.setRadiusSearch(0.1);
     ror.setMinNeighborsInRadius(2);
-    ror.filter(*cloud_filtered);
-    printPointReduction("RadiusOutlierRemoval", original_size, cloud_filtered->size());
-    original_size = cloud_filtered->size();
+    ror.filter(*cloud);
+    printPointReduction("RadiusOutlierRemoval", original_size, cloud->size());
+    original_size = cloud->size();
 
     // Step 4: Median Filter
-    pcl::MedianFilter<PointT> median_filter;
-    median_filter.setInputCloud(cloud_filtered);
-    median_filter.setWindowSize(5); // Adjust window size as needed
-    median_filter.applyFilter(*cloud);
-    printPointReduction("MedianFilter", original_size, cloud->size());
+    //pcl::MedianFilter<PointT> median_filter;
+    //median_filter.setInputCloud(cloud_filtered);
+    //median_filter.setWindowSize(5); // Adjust window size as needed
+    //median_filter.applyFilter(*cloud);
+    //printPointReduction("MedianFilter", original_size, cloud->size());
     //original_size = cloud->size();
 
     /*

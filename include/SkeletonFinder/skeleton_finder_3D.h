@@ -163,6 +163,8 @@ class SkeletonFinder {
                                      double cut_off_length);
   pair<Eigen::Vector3d, int> raycastOnRawMap(Eigen::Vector3d ray_source, Eigen::Vector3d direction,
                                              double cut_off_length);
+  pair<Eigen::Vector3d, int> raycastOnRawMap(Eigen::Vector3d ray_source, Eigen::Vector3d direction,
+                                            double cut_off_length, double search_margin);
   void centralizeNodePos(NodePtr node);
   void identifyBwFacets();
   void identifyFacets(NodePtr node);
@@ -205,9 +207,7 @@ class SkeletonFinder {
                       double _path_target_x, double _path_target_y, double _path_target_z);
   pair<vector<Eigen::Vector3d>, vector<double>> run_findpath2(double _path_start_x, double _path_start_y, double _path_start_z,
                       double _path_target_x, double _path_target_y, double _path_target_z);             
-  vector<NodeNearestNeighbors> run_nearestnodes();
   void run_postprocessing(double base_height, double connectionRadius, double tooCloseThreshold);
-  vector<int> findNearestNodes(NodePtr node);
   void addInitialFrontier(FrontierPtr frontier);
   bool canBeReplacedBy(NodePtr node_to_keep, NodePtr node_to_remove);
   bool checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2);

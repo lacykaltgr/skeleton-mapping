@@ -6,29 +6,47 @@ using namespace Eigen;
 using namespace std;
 
 // run a-star path finding algorithm and return coordinates for path waypoints
-pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath(
+pair<vector<Eigen::Vector3d>, pair<double, double>> SkeletonFinder::run_findpath_w_stats(
   double _path_start_x, double _path_start_y, double _path_start_z,
   double _path_target_x, double _path_target_y, double _path_target_z
 ) {
   Eigen::Vector3d start_query(_path_start_x, _path_start_y, _path_start_z);
   Eigen::Vector3d target_query(_path_target_x, _path_target_y, _path_target_z);
+
   auto begin = chrono::high_resolution_clock::now();
   vector<Eigen::Vector3d> path = findPath(start_query, target_query);
   auto finish = chrono::high_resolution_clock::now();
+
+  double path_find_time;
+  double path_length;
+
   if (path.empty()) {
     cout << "Find path failed!" << endl;
+    path_find_time = -1;
+    path_length = -1;
   } else {
-    //visPath();
+    path_finding_time = chrono::duration_cast<chrono::duration<double>>(finish - begin).count() * 1000;
+    path_length = path_finder.pathLength(path);
+
     cout << "Path finding time: " << chrono::duration_cast<chrono::duration<double>>(finish - begin).count() * 1000 << endl;
-    double path_length = path_finder.pathLength(path);
     cout << "Path length: " << path_length << endl;
   }
+  pair<double, double> stats(path_find_time, path_length);
+  pair<vector<Eigen::Vector3d>, pair<double, double>> result(path, stats);
+  return results; 
+}
+
+
+pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath(
+  double _path_start_x, double _path_start_y, double _path_start_z,
+  double _path_target_x, double _path_target_y, double _path_target_z
+) {
+  auto path_w_stats = run_findpath_w_stats(_path_start_x, _path_start_y, _path_start_z, _path_target_x, _path_target_y, _path_target_z);
 
   vector<double> path_radiuses;
   for (size_t i = 0; i < path.size() - 1; i++) {
     path_radiuses.push_back(0.5);
   }
-
   pair<vector<Eigen::Vector3d>, vector<double>> result(path, path_radiuses);
 
   //pair<vector<Eigen::Vector3d>, vector<double>> result(path, pathRadiuses(path));
@@ -36,13 +54,28 @@ pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath(
 }
 
 // run a-start as in run_findpath, but try to shorten the path by checking path greedily
-// (optional: reverse path for backwards computation)
-pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath2(
+pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath_shorten(
   double _path_start_x, double _path_start_y, double _path_start_z,
   double _path_target_x, double _path_target_y, double _path_target_z
 ) {
-  auto path_w_radius = run_findpath(_path_start_x, _path_start_y, _path_start_z, _path_target_x, _path_target_y, _path_target_z);
-  vector<Eigen::Vector3d> path = path_w_radius.first;
+  auto path_w_stats = run_findpath_w_stats(_path_start_x, _path_start_y, _path_start_z, _path_target_x, _path_target_y, _path_target_z);
+  vector<Eigen::Vector3d> path = path_w_stats.first;
+  vector<Eigen::Vector3d> new_path = shortenPath(path);
+
+  vector<double> path_radiuses;
+  for (size_t i = 0; i < new_path.size() - 1; i++) {
+    path_radiuses.push_back(0.2);
+  }
+
+  pair<vector<Eigen::Vector3d>, vector<double>> result(new_path, path_radiuses);
+  //pair<vector<Eigen::Vector3d>, vector<double>> result(path, pathRadiuses(path));
+  return result;  
+}
+
+
+
+pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::shortenPath(vector<Eigen::Vector3d> path) {
+
   vector<Eigen::Vector3d> new_path;
 
   Eigen::Vector3d this_waypoint(_path_start_x, _path_start_y, _path_start_z);
@@ -61,47 +94,9 @@ pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath2(
     new_path.push_back(path[achieved]);
     this_waypoint = path[achieved];
   }
-  vector<double> path_radiuses;
-  for (size_t i = 0; i < new_path.size() - 1; i++) {
-    path_radiuses.push_back(0.2);
-  }
 
-  pair<vector<Eigen::Vector3d>, vector<double>> result(new_path, path_radiuses);
-  return result;  
+  return new_path;
 }
-
-/*
-// run a-start as in run_findpath, but try to shorten the path by checking path greedily
-// (optional: reverse path for backwards computation)
-pair<vector<Eigen::Vector3d>, vector<double>> SkeletonFinder::run_findpath3(
-  double _path_start_x, double _path_start_y, double _path_start_z,
-  double _path_target_x, double _path_target_y, double _path_target_z,
-  bool with_radius = true
-) {
-  vector<Eigen::Vector3d> path = run_findpath(_path_start_x, _path_start_y, _path_start_z, _path_target_x, _path_target_y, _path_target_z);
-  vector<Eigen::Vector3d> new_path;
-
-  
-  Eigen::Vector3d this_waypoint(_path_start_x, _path_start_y, _path_start_z);
-  int achieved = -1;
-
-  while (achieved < path.size()-1) {
-    for (int i = achieved + 1; i < path.size(); i++) {
-      next_waypoint = path[i];
-      if (checkPathClear(this_waypoint, next_waypoint)) {
-        achieved++;
-        continue;
-      break;
-    }
-    new_path.push_back(path[achieved]);
-    this_waypoint = path[achieved];
-  }
-
-  if (!with_radius)
-    return new_path;
-  return result;
-}}
-*/
 
 
 vector<NodePtr> SkeletonFinder::pathToNodes(vector<Eigen::Vector3d> path) {
@@ -277,7 +272,7 @@ bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) 
 
 
 bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
-  double floor_height_gt = 0.0;
+  double floor_height_gt = 0.2;
   Eigen::Vector3d downwards(0, 0, -1);
   //double base_height = base_pos(2);
   Eigen::Vector3d start(base_pos(0), base_pos(1), floor_height_gt + 1.2);
@@ -286,9 +281,92 @@ bool SkeletonFinder::isValidPosition(Eigen::Vector3d base_pos) {
     return false;
   }
   double floor_height = raycast_result.first(2); // 0
-  if (floor_height > floor_height_gt+0.6) // should add floor z dim
+  if (floor_height > floor_height_gt + _search_margin) // should add floor z dim
     return false;
   return true;
+}
+
+
+
+
+// new era
+
+
+bool SkeletonFinder::rayFlying(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius) {
+  double length = (pos2 - pos1).norm();
+  double step_length = _resolution;
+
+  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
+  int num_steps = ceil(length / step_length);
+
+  Eigen::Vector3d begin_pos = pos1;
+  for (int i = 0; i < num_steps; i++) {
+    Eigen::Vector3d check_pos = begin_pos + i * step;
+    if (collisionCheck(check_pos, base_radius)) {
+      return false;
+    }
+  }
+  if (collisionCheck(pos2, base_radius)) {
+    return false;
+  }
+  return true;
+}
+
+
+bool SkeletonFinder::rayWalking(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double max_step_height=0.2) {
+  double length = (pos2 - pos1).norm();
+  double step_length = _resolution;
+
+  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
+  int num_steps = ceil(length / step_length);
+
+
+  // check first position
+  Eigen::Vector3d begin_pos = pos1;
+  double ref_floor_height = checkFloorHeight(begin_pos, base_radius);
+  if (ref_floor_height == -1) {
+    return false;
+  }
+
+
+  // check all positions in path  
+  for (int i = 1; i < num_steps; i++) {
+    Eigen::Vector3d check_pos = begin_pos + i * step;
+    double check_floor_height = checkFloorHeight(check_pos, base_radius);
+
+    if (check_floor_height == -1) {
+      return false;
+    }
+
+    if (fabs(check_floor_height - ref_floor_height) > max_step_height) {
+      return false;
+    }
+
+    ref_floor_height = check_floor_height;
+    
+  }
+
+  // check the last position
+  double check_floor_height = checkFloorHeight(check_pos, base_radius);
+  if (check_floor_height == -1) {
+    return false;
+  }
+  if (fabs(check_floor_height - ref_floor_height) > max_step_height) {
+    return false;
+  }
+
+  return true;
+}
+
+
+double SkeletonFinder::checkFloorHeight(Eigen::Vector3d base_pos, double base_radius, double cut_off_length = 3.0) {
+  Eigen::Vector3d downwards(0, 0, -1);
+  pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, downwards, cut_off_length, base_radius);
+  if (raycast_result.second == -2) {
+    return -1;
+  }
+  double floor_height = raycast_result.first(2);
+  return floor_height;
 }
 
 

@@ -17,15 +17,11 @@ SkeletonFinder::SkeletonFinder(YAML::Node &config) {
     config["y_min"].as<double>(), config["y_max"].as<double>(),
     config["z_min"].as<double>(), config["z_max"].as<double>(),
     config["start"]["x"].as<double>(), config["start"]["y"].as<double>(), config["start"]["z"].as<double>(),
-    config["map_representation"].as<int>(), config["is_simulation"].as<bool>(),
     config["frontier_creation_threshold"].as<double>(), config["frontier_jump_threshold"].as<double>(), config["frontier_split_threshold"].as<double>(),
     config["min_flowback_creation_threshold"].as<int>(), config["min_flowback_creation_radius_threshold"].as<double>(),
     config["min_node_radius"].as<double>(), config["search_margin"].as<double>(), config["max_ray_length"].as<double>(),
     config["max_expansion_ray_length"].as<double>(), config["max_height_diff"].as<double>(), config["sampling_density"].as<int>(),
-    config["max_facets_grouped"].as<int>(), config["resolution"].as<double>(),
-    config["debug_mode"].as<bool>(), config["bad_loop"].as<bool>(),
-    config["visualize_final_result_only"].as<bool>(), config["visualize_all"].as<bool>(), config["visualize_outwards_normal"].as<bool>(),
-    config["visualize_nbhd_facets"].as<bool>(), config["visualize_black_polygon"].as<bool>()
+    config["max_facets_grouped"].as<int>(), config["resolution"].as<double>(), config["bad_loop"].as<bool>(),
   );
 
   nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
@@ -59,7 +55,7 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
 
   if (min_dis < _search_margin) {
     pair<double, int> return_pair(min_dis, min_dis_node_index);
-    return return_pair;
+    return return_pair
   }
 
   pcl::PointXYZ searchPoint;
@@ -111,16 +107,14 @@ inline double SkeletonFinder::radiusSearchOnRawMap(Vector3d &search_Pt) {
 
 bool SkeletonFinder::collisionCheck(Vector3d search_pt, double threshold) {
   // Point cloud map
-  if (_map_representation == 0) {
-    double dis = radiusSearchOnRawMap(search_pt);
-    if (dis < threshold)
-      return true;
-    else
-      return false;
-  }
-  // Won't reach
-  return true;
+  double dis = radiusSearchOnRawMap(search_pt);
+  if (dis < threshold)
+    return true;
+  else
+    return false;
 }
+
+
 void SkeletonFinder::recordNode(NodePtr new_node) {
   NodeList.push_back(new_node);
   nodes_pcl->points.push_back(pcl::PointXYZ(
@@ -143,14 +137,13 @@ void SkeletonFinder::run_processing(
     cout << "Map pointcloud is empty!" << endl;
     return;
   }
-
+  findBoundingBox(raw_map_pcl);
   //TODO: addBbxToMap
   //addBbxToMap(raw_map_pcl);
 
+
   // Point cloud map
-  if (_map_representation == 0) {
-    kdtreeForRawMap.setInputCloud(raw_map_pcl);
-  }
+  kdtreeForRawMap.setInputCloud(raw_map_pcl);
     
   Eigen::Vector3d start;
   start << _start_x, _start_y, _start_z;
@@ -233,20 +226,7 @@ void SkeletonFinder::skeletonExpansion(Eigen::Vector3d startPt) {
     verifyFrontier_timing += chrono::duration_cast<chrono::duration<double>>(finish - begin).count();
     begin = chrono::high_resolution_clock::now();
     if (cur_frontier->valid) {
-      if (!processFrontier(cur_frontier)) {
-      } else {
-        if (!_visualize_final_result_only)
-          visualization();
-        if (_debug_mode) {
-          cout << "Expanded a valid frontier." << endl;
-          visualization();
-          getchar();
-        }
-      }
-    } else {
-      if (_debug_mode) {
-        cout << "Frontier not valid!" << endl;
-      }
+      processFrontier(cur_frontier)
     }
     finish = chrono::high_resolution_clock::now();
     processFrontier_timing += chrono::duration_cast<chrono::duration<double>>(finish - begin).count();
@@ -452,6 +432,39 @@ pair<Vector3d, int> SkeletonFinder::raycastOnRawMap(Vector3d ray_source,
                                                     Vector3d direction,
                                                     double cut_off_length) {
   // Point cloud map
+  double clearance = radiusSearchOnRawMap(ray_source);
+  if (clearance > cut_off_length) {
+    pair<Vector3d, int> return_pair(ray_source, -2);
+    return return_pair;
+  } else {
+    Eigen::Vector3d current_pos = ray_source + clearance * direction;
+    double length = clearance;
+
+    while (length <= cut_off_length) {
+      double radius = radiusSearchOnRawMap(current_pos);
+
+      if (radius < _search_margin) {
+        pair<Vector3d, int> return_pair(current_pos, -1);
+        return return_pair;
+      }
+      current_pos += radius * direction;
+      length += radius;
+    }
+
+    pair<Vector3d, int> return_pair(ray_source, -2);
+    return return_pair;
+  }
+
+}
+
+
+// -2: collision not found within cut_off_length
+// -1: collision is with map
+pair<Vector3d, int> SkeletonFinder::raycastOnRawMap(Vector3d ray_source,
+                                                    Vector3d direction,
+                                                    double cut_off_length,
+                                                    double search_margin) {
+  // Point cloud map
   if (_map_representation == 0) {
     double clearance = radiusSearchOnRawMap(ray_source);
     if (clearance > cut_off_length) {
@@ -464,7 +477,7 @@ pair<Vector3d, int> SkeletonFinder::raycastOnRawMap(Vector3d ray_source,
       while (length <= cut_off_length) {
         double radius = radiusSearchOnRawMap(current_pos);
 
-        if (radius < _search_margin) {
+        if (radius < search_margin) {
           pair<Vector3d, int> return_pair(current_pos, -1);
           return return_pair;
         }
@@ -480,6 +493,7 @@ pair<Vector3d, int> SkeletonFinder::raycastOnRawMap(Vector3d ray_source,
   pair<Vector3d, int> temp(Vector3d::Zero(), 0);
   return temp;
 }
+
 
 void SkeletonFinder::centralizeNodePos(NodePtr node) {
   int cnt = 0;
