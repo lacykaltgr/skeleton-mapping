@@ -22,10 +22,11 @@ SkeletonFinder::SkeletonFinder(YAML::Node &config) {
     config["min_node_radius"].as<double>(), config["search_margin"].as<double>(), config["max_ray_length"].as<double>(),
     config["max_expansion_ray_length"].as<double>(), config["max_height_diff"].as<double>(), config["sampling_density"].as<int>(),
     config["max_facets_grouped"].as<int>(), config["resolution"].as<double>(), config["bad_loop"].as<bool>(),
+    config["base_height"].as<double>(), config["base_radius"].as<double>(), config["connection_radius"].as<double>(), config["too_close_threshold"].as<double>(),
+    config["robot_type"].as<int>(), config["raywalking_max_height_diff"].as<double>(), config["exploration_mode"].as<bool>()
   );
 
   nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
-
 }
 
 SkeletonFinder::~SkeletonFinder() {}
@@ -55,7 +56,7 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
 
   if (min_dis < _search_margin) {
     pair<double, int> return_pair(min_dis, min_dis_node_index);
-    return return_pair
+    return return_pair;
   }
 
   pcl::PointXYZ searchPoint;
@@ -158,7 +159,7 @@ void SkeletonFinder::run_processing(
 
   cout << "Expansion time: " << timing << endl;
 
-  visualization();
+  cout << "Number of nodes: " << NodeList.size() << endl;
 }
 
 
@@ -173,13 +174,8 @@ void SkeletonFinder::skeletonExpansion(Eigen::Vector3d startPt) {
   FrontierPtr cur_frontier;
   while (!pending_frontiers.empty()) {
     auto begin = chrono::high_resolution_clock::now();
-    // visualization();
-    // cout << "Wait for key to expand next frontier..." << endl;
-    // getchar();
 
     cur_frontier = pendingFrontiersPopFront();
-    if (cur_frontier->deleted)
-      continue;
     if (cur_frontier == NULL)
       continue;
 
@@ -226,7 +222,7 @@ void SkeletonFinder::skeletonExpansion(Eigen::Vector3d startPt) {
     verifyFrontier_timing += chrono::duration_cast<chrono::duration<double>>(finish - begin).count();
     begin = chrono::high_resolution_clock::now();
     if (cur_frontier->valid) {
-      processFrontier(cur_frontier)
+      processFrontier(cur_frontier);
     }
     finish = chrono::high_resolution_clock::now();
     processFrontier_timing += chrono::duration_cast<chrono::duration<double>>(finish - begin).count();
@@ -305,8 +301,6 @@ bool SkeletonFinder::initNode(NodePtr curNodePtr) {
 
     curr = chrono::high_resolution_clock::now();
     addFacetsToPcl_timing += chrono::duration_cast<chrono::duration<double>>(curr - prev).count();
-
-    // visualization();
 
   }
 
@@ -391,10 +385,7 @@ pair<Vector3d, int> SkeletonFinder::raycast(Vector3d ray_source,
                                             Vector3d direction,
                                             double cut_off_length) {
   double clearance = radiusSearch(ray_source).first;
-  if (clearance > cut_off_length) {
-    pair<Vector3d, int> return_pair(ray_source, -2);
-    return return_pair;
-  } else {
+  if (clearance < cut_off_length) {
     // Eigen::Vector3d offset = _resolution * direction;
     Eigen::Vector3d current_pos = ray_source + clearance * direction;
     // int cnt = 0;
@@ -420,10 +411,27 @@ pair<Vector3d, int> SkeletonFinder::raycast(Vector3d ray_source,
       current_pos += radius * direction;
       length += radius;
     }
-
-    pair<Vector3d, int> return_pair(ray_source, -2);
-    return return_pair;
   }
+
+  // point is achieveable by raycasting
+  // try raywalking
+  // TODO: added this part
+  
+  if (_exploration_mode) {
+    Vector3d target_pos = ray_source + cut_off_length * direction;
+    double clearence = checkPathClearLength(ray_source, target_pos);
+    bool safe = fabs(clearence - (target_pos - ray_source).norm()) < 1e-4;
+    if (!safe) {
+      double safe_len = clearence - _base_radius;
+      if (safe_len < 0) safe_len = 0;
+      pair<Vector3d, int> return_pair(ray_source + direction * (safe_len), -1);
+      return return_pair;
+    }
+  }
+
+  
+  pair<Vector3d, int> return_pair(ray_source, -2);
+  return return_pair;
 }
 
 // -2: collision not found within cut_off_length
@@ -465,33 +473,28 @@ pair<Vector3d, int> SkeletonFinder::raycastOnRawMap(Vector3d ray_source,
                                                     double cut_off_length,
                                                     double search_margin) {
   // Point cloud map
-  if (_map_representation == 0) {
-    double clearance = radiusSearchOnRawMap(ray_source);
-    if (clearance > cut_off_length) {
-      pair<Vector3d, int> return_pair(ray_source, -2);
-      return return_pair;
-    } else {
-      Eigen::Vector3d current_pos = ray_source + clearance * direction;
-      double length = clearance;
+  double clearance = radiusSearchOnRawMap(ray_source);
+  if (clearance > cut_off_length) {
+    pair<Vector3d, int> return_pair(ray_source, -2);
+    return return_pair;
+  } else {
+    Eigen::Vector3d current_pos = ray_source + clearance * direction;
+    double length = clearance;
 
-      while (length <= cut_off_length) {
-        double radius = radiusSearchOnRawMap(current_pos);
+    while (length <= cut_off_length) {
+      double radius = radiusSearchOnRawMap(current_pos);
 
-        if (radius < search_margin) {
-          pair<Vector3d, int> return_pair(current_pos, -1);
-          return return_pair;
-        }
-        current_pos += radius * direction;
-        length += radius;
+      if (radius < search_margin) {
+        pair<Vector3d, int> return_pair(current_pos, -1);
+        return return_pair;
       }
-
-      pair<Vector3d, int> return_pair(ray_source, -2);
-      return return_pair;
+      current_pos += radius * direction;
+      length += radius;
     }
+
+    pair<Vector3d, int> return_pair(ray_source, -2);
+    return return_pair;
   }
-  // Won't reach
-  pair<Vector3d, int> temp(Vector3d::Zero(), 0);
-  return temp;
 }
 
 
@@ -547,20 +550,29 @@ void SkeletonFinder::identifyFacets(NodePtr node) {
 }
 
 void SkeletonFinder::identifyFrontiers(NodePtr node) {
+  // only added UNKNOWN branch in first BFS loop
 
   vector<vector<VertexPtr>> bv_groups;
+  vector<vector<VertexPtr>> skipped_wv_groups;
   int num_wv = node->white_vertices.size();
+
   for (int i = 0; i < num_wv; i++) {
     VertexPtr seed_wv = node->white_vertices.at(i);
     if (seed_wv->visited)
       continue;
 
     seed_wv->visited = true;
+    // black groups
     vector<VertexPtr> group_bv;
+    // search
     deque<VertexPtr> pending_wv;
-
     pending_wv.push_back(seed_wv);
+    // store group
+    vector<VertexPtr> group_wv;
+    group_wv.push_back(seed_wv);
 
+    // for incremental exploration
+    bool frontier_not_ready = false;
     while (!pending_wv.empty()) {
       VertexPtr v = pending_wv.front();
       v->visited = true;
@@ -572,21 +584,36 @@ void SkeletonFinder::identifyFrontiers(NodePtr node) {
             continue;
           Eigen::Vector3d midpt = (v->coord + v_nbhd->coord) / 2;
           if (radiusSearch(midpt).first > 2 * _search_margin) {
+            group_wv.push_back(v_nbhd);
             pending_wv.push_back(v_nbhd);
           }
-        } else {
-          // v_nbhd->visited = true;
-          v_nbhd->critical = true;
-          group_bv.push_back(v_nbhd);
-        }
+        } else if (v_nbhd->type == BLACK)
+            group_bv.push_back(v_nbhd);
+          else if (v_nbhd->type == UNKNOWN)
+            frontier_not_ready = true;
+          // this branch is for incremental exploration
+          // TODO: modify here so that unknown frontiers are not passed on
       }
     }
-
+    if (frontier_not_ready) {
+      skipped_wv_groups.push_back(group_wv);
+      continue;
+    }
     if (group_bv.size() < 3)
       continue;
-    for (VertexPtr v : group_bv)
+
+    for (VertexPtr v : group_bv) {
+      v->critical = true;
       v->visited = true;
+    }
     bv_groups.push_back(group_bv);
+  }
+
+  // turn the visited flag off for skipped white vertices
+  for (vector<VertexPtr> group_wv : skipped_wv_groups) {
+    for (VertexPtr v : group_wv) {
+        v->visited = false;
+    }
   }
 
   // Filter black vertices
@@ -645,9 +672,8 @@ void SkeletonFinder::identifyFrontiers(NodePtr node) {
   for (VertexPtr bv : node->black_vertices) {
     if (onCeilOrFloor(bv->coord) != 0 && !bv->critical)
       continue;
-    bv_for_mesh.push_back(
-        node->sampling_directions.at(bv->sampling_dire_index));
-    // node->poly_vertices.push_back(bv);
+    auto dir = node->sampling_directions.at(bv->sampling_dire_index)
+    bv_for_mesh.push_back(dir);
     bv->critical = true;
   }
 
@@ -766,10 +792,6 @@ void SkeletonFinder::identifyFrontiers(NodePtr node) {
     int count_jump = 0;
     for (int i = 0; i < 3; i++) {
       VertexPtr v1 = facet->vertices.at(i);
-      // if(onCeilOrFloor(v1->coord) != 0){
-      //   bad = true;
-      //   break;
-      // }
       VertexPtr v2 = facet->vertices.at((i + 1) % 3);
       if (v1->dis_to_center > _frontier_jump_threshold * v2->dis_to_center ||
           v2->dis_to_center > _frontier_jump_threshold * v1->dis_to_center) {
@@ -830,14 +852,20 @@ void SkeletonFinder::identifyFrontiers(NodePtr node) {
 vector<FrontierPtr>
 SkeletonFinder::splitFrontier(NodePtr node, vector<FacetPtr> group_facets) {
   vector<FrontierPtr> frontiers;
+  // check if the group facets are too big
   if ((int)group_facets.size() <= _max_facets_grouped) {
+    // find the average normal of the group facets
     Eigen::Vector3d avg_normal = Eigen::Vector3d::Zero();
-    vector<FacetPtr> filtered_group_facets;
+    
     for (FacetPtr f : group_facets) {
       avg_normal += f->outwards_unit_normal;
     }
     avg_normal.normalize();
+
+    // filter out outlier facets on the edge of the group
+    vector<FacetPtr> filtered_group_facets;
     for (FacetPtr f : group_facets) {
+      // facets on the edge of the group
       if (f->nbhd_facets.size() < 2) {
         double angle = acos(avg_normal.dot(f->outwards_unit_normal));
         if (angle > M_PI / 2.5) {
@@ -846,28 +874,27 @@ SkeletonFinder::splitFrontier(NodePtr node, vector<FacetPtr> group_facets) {
           FrontierPtr new_frontier = new Frontier(single_facet, node);
           frontiers.push_back(new_frontier);
           if (!initFrontier(new_frontier)) {
-            // ROS_ERROR("1-2. Init frontier failed!!! Change to use alternative
-            // center and normal");
+            cout << "Init frontier failed!" << endl;
+            cout << "Change to use alternative center and normal?" << endl;
           }
           continue;
         }
       }
       filtered_group_facets.push_back(f);
     }
+
     FrontierPtr new_frontier = new Frontier(filtered_group_facets, node);
     frontiers.push_back(new_frontier);
     if (!initFrontier(new_frontier)) {
-      // ROS_ERROR("1-2. Init frontier failed!!! Change to use alternative
-      // proj_center");
+      cout << "Init frontier failed!" << endl;
+      cout << "Change to use alternative proj_center?" << endl;
     }
-    // }
   } else {
-    // findNbhdFacets(group_facets);
     for (FacetPtr facet : group_facets) {
       if (facet->visited)
         continue;
-
       facet->visited = true;
+
       Eigen::Vector3d normal = Eigen::Vector3d::Zero();
       vector<FacetPtr> small_group_facets;
       deque<FacetPtr> pending_facets;
@@ -875,7 +902,6 @@ SkeletonFinder::splitFrontier(NodePtr node, vector<FacetPtr> group_facets) {
 
       while (!pending_facets.empty() &&
              (int)small_group_facets.size() < _max_facets_grouped) {
-        // while (!pending_facets.empty()) {
         FacetPtr f = pending_facets.front();
         pending_facets.pop_front();
 
@@ -904,13 +930,11 @@ SkeletonFinder::splitFrontier(NodePtr node, vector<FacetPtr> group_facets) {
       FrontierPtr new_frontier = new Frontier(small_group_facets, node);
       frontiers.push_back(new_frontier);
       if (!initFrontier(new_frontier)) {
-        // ROS_ERROR("2. Init frontier failed!!! Change to use alternative
-        // center and normal");
+        cout << "Init frontier failed!" << endl;
+        cout << "Change to use alternative proj_center?" << endl;
       }
     }
   }
-  // if (frontiers.size() > 1) ROS_WARN("Split frontier into %d frontiers",
-  // frontiers.size());
   return frontiers;
 }
 
@@ -988,12 +1012,11 @@ SkeletonFinder::findGroupFacetsFromVertices(NodePtr node,
 void SkeletonFinder::findFlowBack(NodePtr node) {
   if (node->seed_frontier == NULL)
     return;
-  // vector<int> loop_frontier_counter(loop_candidate_frontiers.size(), 0);
+
   int size = loop_candidate_frontiers.size();
   vector<vector<Eigen::Vector3d>> flow_back_frontier_log(size);
   vector<FrontierPtr> frontiers(size);
   vector<int> pending_frontier_index;
-  vector<int> collision_node_index_log;
 
   // Count number of contact black vertices on each frontiers
   for (VertexPtr v : node->black_vertices) {
@@ -1002,20 +1025,15 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
     if (v->collision_node_index < 0)
       continue;
 
-
     // hit_on_pcl is on seed_frontier which is already connected
-    if (checkPtOnFrontier(node->seed_frontier, v->coord)) {
-      // ROS_WARN("hit_on_pcl is on seed_frontier");
+    if (checkPtOnFrontier(node->seed_frontier, v->coord))
       continue;
-    }
 
-    FrontierPtr loop_ftr =
-        findFlowBackFrontier(v->coord, v->collision_node_index);
-    if (loop_ftr == NULL) {
-      // ROS_ERROR("Cannot find a loop frontier!!!");
-      collision_node_index_log.push_back(v->collision_node_index);
+    FrontierPtr loop_ftr = findFlowBackFrontier(v->coord, v->collision_node_index);
+
+    // cannot find loop frontier
+    if (loop_ftr == NULL)
       continue;
-    }
 
     flow_back_frontier_log.at(loop_ftr->index).push_back(v->coord);
     frontiers.at(loop_ftr->index) = loop_ftr;
@@ -1025,15 +1043,13 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
   for (int i = 0; i < size; i++) {
     if (flow_back_frontier_log.at(i).empty())
       continue;
-    if ((int)flow_back_frontier_log.at(i).size() <
-        _min_flowback_creation_threshold) {
-      // ROS_ERROR("Flowback size: %d", flow_back_frontier_log.at(i).size());
-      // ROS_ERROR("Radius: %f",
-      // getVerticesRadius(flow_back_frontier_log.at(i)));
-      if (getVerticesRadius(flow_back_frontier_log.at(i)) <
-          _min_flowback_creation_radius_threshold) 
-        continue;
-    }
+
+    int n_vertices = (int) flow_back_frontier_log.at(i).size();
+    int radius_vertices = getVerticesRadius(flow_back_frontier_log.at(i));
+    if (n_vertices < _min_flowback_creation_threshold 
+        && radius_vertices < _min_flowback_creation_radius_threshold) 
+        continue
+
     if (pending_frontier_index.empty())
       pending_frontier_index.push_back(i);
     else {
@@ -1053,20 +1069,16 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
 
   // Start flowback
   int size_pending_frontier = pending_frontier_index.size();
-  // ROS_ERROR("size_pending_frontier: %d", size_pending_frontier);
   vector<Eigen::Vector3d> connected_node_pos;
   if (node->seed_frontier->gate_node->connected_Node_ptr.empty()) {
     connected_node_pos.push_back(node->seed_frontier->master_node->coord);
-    // ROS_INFO("gate node con empty: push_back a pos");
   } else {
-    for (NodePtr gate_con_node :
-         node->seed_frontier->gate_node->connected_Node_ptr) {
+    for (NodePtr gate_con_node : node->seed_frontier->gate_node->connected_Node_ptr) {
       connected_node_pos.push_back(gate_con_node->coord);
-      // ROS_INFO("gate node con nonempty: push_back a pos");
     }
   }
+
   for (int i = 0; i < size_pending_frontier; i++) {
-    // ROS_ERROR("%d ,", pending_frontier_index.at(i));
     int ind = pending_frontier_index.at(i);
     FrontierPtr flowback_frontier = frontiers.at(ind);
 
@@ -1076,44 +1088,43 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
       end_pt_on_frontier = flowback_frontier->proj_center;
     else
       end_pt_on_frontier = flowback_frontier->gate_node->coord;
-    if (!checkSegClear(node->coord, end_pt_on_frontier) ||
-        !checkSegClear(flowback_frontier->master_node->coord,
-                       end_pt_on_frontier)) {
-      // ROS_ERROR("Flowback seg not clear!");
-      continue;
+
+    if (_exploration_mode) {
+      if (!checkPathClear(node->coord, end_pt_on_frontier) ||
+          !checkPathClear(flowback_frontier->master_node->coord, end_pt_on_frontier)) {
+        // ROS_ERROR("Flowback seg not clear!");
+        continue;
+      }
+    } else {
+      if (!checkSegClear(node->coord, end_pt_on_frontier) ||
+          !checkSegClear(flowback_frontier->master_node->coord, end_pt_on_frontier)) {
+        // ROS_ERROR("Flowback seg not clear!");
+        continue;
+      }
     }
 
     // Bad loop: loop only contains 4 nodes
     if (_bad_loop) {
       bool bad_loop = false;
       for (Eigen::Vector3d pos : connected_node_pos) {
-        // ROS_INFO("Checking connected node pos: (%f, %f, %f)", pos(0), pos(1),
-        // pos(2));
         if (flowback_frontier->gate_node == NULL ||
             flowback_frontier->gate_node->rollbacked) {
-          // ROS_INFO("flowback_frontier doesn't have gate node");
           if (isSamePos(pos, flowback_frontier->master_node->coord)) {
             bad_loop = true;
-            // ROS_INFO("isSamePos");
           }
-          // ROS_INFO("NOT isSamePos");
         } else {
-          // ROS_INFO("flowback_frontier has gate node");
           for (NodePtr frontier_con_node :
                flowback_frontier->gate_node->connected_Node_ptr) {
             if (isSamePos(pos, frontier_con_node->coord)) {
               bad_loop = true;
-              // ROS_INFO("isSamePos");
               break;
             }
-            // ROS_INFO("NOT isSamePos");
           }
         }
         if (bad_loop)
           break;
       }
       if (bad_loop) {
-        // ROS_ERROR("BAD LOOP!!!");
         continue;
       }
     }
@@ -1200,7 +1211,6 @@ bool SkeletonFinder::initFrontier(FrontierPtr frontier) {
   }
 
   if (!proj_center_found) {
-    // ROS_ERROR("size of frontier facets: %d", frontier->facets.size());
     double min_angle = M_PI;
     FacetPtr best_facet;
     for (FacetPtr f : frontier->facets) {
@@ -1275,49 +1285,38 @@ bool SkeletonFinder::checkPtInPolyhedron(NodePtr node, Eigen::Vector3d pt) {
 }
 
 void SkeletonFinder::verifyFrontier(FrontierPtr ftr_ptr) {
-  // ROS_ERROR("Start verifyFrontier");
-
   Eigen::Vector3d raycast_start_pt =
       ftr_ptr->proj_center + 2.0 * ftr_ptr->outwards_unit_normal *
-                                 _search_margin; // / ftr_ptr->cos_theta;
+                                 _search_margin;
 
+  // check if the frontier is too near to the obstacle
   pair<double, int> rs_result = radiusSearch(raycast_start_pt);
   if (rs_result.first < _search_margin) {
     ftr_ptr->valid = false;
     return;
   }
-  // ROS_ERROR("raycast_start_pt OK dis to obstable: %f",
-  // radiusSearch(raycast_start_pt).first);
 
+  // raycast in outwards direction
   pair<Vector3d, int> raycast_result =
       raycast(raycast_start_pt, ftr_ptr->outwards_unit_normal,
               _max_expansion_ray_length);
   Eigen::Vector3d hit_on_pcl = raycast_result.first;
 
-  // raycast into a long corridor
+  // no hit (free space), create a new node candidate
   if (hit_on_pcl == raycast_start_pt) {
-    // ROS_INFO("verifyFrontiers: raycast into a long corridor");
     Eigen::Vector3d new_node_candidate =
         ftr_ptr->proj_center +
         0.5 * _max_expansion_ray_length * ftr_ptr->outwards_unit_normal;
     if (checkWithinBbx(new_node_candidate)) {
-      ftr_ptr->next_node_pos = new_node_candidate;
       ftr_ptr->valid = true;
-      // ROS_INFO("verifyFrontiers: and set new node at max limit");
-    } else {
-      // ROS_INFO("verifyFrontiers: new node candidate exceeds bbx");
+      ftr_ptr->next_node_pos = new_node_candidate;
     }
   }
-  // normal case
+  // normal case, create node in the midpoint
   else if (getDis(hit_on_pcl, ftr_ptr->proj_center) >
            _frontier_creation_threshold) {
     ftr_ptr->valid = true;
     ftr_ptr->next_node_pos = (hit_on_pcl + ftr_ptr->proj_center) / 2;
-    // ROS_INFO("verifyFrontiers: valid. New node (%f, %f, %f)",
-    // ftr_ptr->next_node_pos(0),
-    //          ftr_ptr->next_node_pos(1), ftr_ptr->next_node_pos(2));
-  } else {
-    // ROS_INFO("verifyFrontiers: hit_on_pcl too near to frontier");
   }
 }
 
@@ -1326,6 +1325,10 @@ void SkeletonFinder::addFacetsToPcl(NodePtr nodePtr) {
   int num_facet = nodePtr->facets.size();
   for (int i = 0; i < num_facet; i++) {
     FacetPtr facet = nodePtr->facets.at(i);
+
+    if (facet->addedToPcl)
+      continue;
+    facet->addedToPcl = true;
 
     vector<Eigen::Vector3d> start_list;
     vector<double> length_list;
@@ -1346,7 +1349,6 @@ void SkeletonFinder::addFacetsToPcl(NodePtr nodePtr) {
     double theta_right = acos(right_to_top.dot(right_to_left) /
                               (right_to_top.norm() * right_to_left.norm()));
     double step_length = _resolution / 2;
-    // double step_length = _search_margin / 2;
     double start_pt_step = step_length / sin(theta);
     double end_pt_step = step_length / sin(theta_right);
 
@@ -1394,11 +1396,6 @@ void SkeletonFinder::addFacetsToPcl(NodePtr nodePtr) {
 }
 
 bool SkeletonFinder::processFrontier(FrontierPtr curFtrPtr) {
-  // ROS_ERROR("Start process frontier");
-  // double direction_theta =
-  //     atan2(curFtrPtr->outwards_unit_normal(1),
-  //     curFtrPtr->outwards_unit_normal(0)) * 180 / M_PI;
-
   // Gate node: midpoint of frontier
   NodePtr gate;
   if (curFtrPtr->gate_node == NULL) {
@@ -1410,17 +1407,14 @@ bool SkeletonFinder::processFrontier(FrontierPtr curFtrPtr) {
 
   bool floor = checkFloor(gate);
   bool bbx = checkWithinBbx(gate->coord);
-  if (!floor || !bbx) {
+  bool path_clear = true;
+  if (_exploration_mode) {
+      path_clear = checkPathClear(gate->coord, curFtrPtr->master_node->coord) &&
+                    checkPathClear(gate->coord, curFtrPtr->next_node_pos);
+  }
+
+  if (!floor || !bbx || !path_clear) {
     gate->rollbacked = true;
-    // if (!floor) {
-    //   ROS_INFO("processFrontier: no floor");
-    // }
-    // if (!bbx) {
-    //   ROS_INFO("processFrontier: outside bbx");
-    // }
-    // ROS_INFO("processFrontier: gate coord: (%f, %f, %f)", gate->coord(0),
-    // gate->coord(1),
-    //          gate->coord(2));
     return false;
   }
 
@@ -1436,7 +1430,6 @@ bool SkeletonFinder::processFrontier(FrontierPtr curFtrPtr) {
     gate->connected_Node_ptr.push_back(new_node);
     new_node->connected_Node_ptr.push_back(gate);
   } else {
-    // ROS_INFO("processFrontier: new node init fails");
     new_node->rollbacked = true;
     if (gate->connected_Node_ptr.empty()) {
       gate->rollbacked = true;
@@ -1446,12 +1439,6 @@ bool SkeletonFinder::processFrontier(FrontierPtr curFtrPtr) {
       }
     }
   }
-  // ROS_WARN("Number of connected node: %d",
-  // new_node->connected_Node_ptr.size()); for (NodePtr con :
-  // new_node->connected_Node_ptr) {
-  //   ROS_INFO("Connected node pos (%f, %f, %f)", con->coord(0), con->coord(1),
-  //   con->coord(2));
-  // }
 
   return init_success;
 }

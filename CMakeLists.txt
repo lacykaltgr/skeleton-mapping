@@ -7,6 +7,11 @@ set(CMAKE_BUILD_TYPE "Release")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-std=c++17 -march=native ${CMAKE_CXX_FLAGS} -g -O3 -Wall")
 
+# Define options for building components
+option(BUILD_TOOLS "Build tools" OFF)
+option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_EXPERIMENTS "Build experiments" OFF)
+
 # Find packages
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io filters)
@@ -15,6 +20,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(OpenCV REQUIRED)
 #find_package(Torch REQUIRED)
 #find_package(CUDA REQUIRED)
+find_package(Boost REQUIRED)
 
 include_directories(
     SYSTEM 
@@ -24,6 +30,7 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
     #${TORCH_LIBRARIES}
     #${CUDA_LIBRARIES}
+    ${Boost_INCLUDE_DIRS}
 )
 
 link_directories(
@@ -31,126 +38,129 @@ link_directories(
 )
 add_definitions(${PCL_DEFINITIONS})
 
-# Omni2Colmap
-add_executable(omni2colmap
-    utils/omni2colmap.cpp
-)
+############################
+# TESTS
+############################
+if(BUILD_TESTS)
+    # Skeleton finder 3D test
+    add_executable(skeleton_finder_3D_test
+        tests/skeleton_finder_3D_test.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+    )
+    target_link_libraries(skeleton_finder_3D_test
+        ${PCL_LIBRARIES}
+        yaml-cpp
+    )
 
-target_link_libraries(omni2colmap
-    nlohmann_json::nlohmann_json
-)
+    # Skeleton finder 3D post processing test
+    add_executable(skeleton_finder_3D_proc
+        tests/skeleton_finder_3D_proc.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+    )
 
-# Dense reconstruction
-add_executable(dense_recon
-    utils/dense_reconstruction.cpp
-)
+    target_link_libraries(skeleton_finder_3D_proc
+        ${PCL_LIBRARIES}
+        yaml-cpp
+    )
+endif()
 
-target_link_libraries(dense_recon
-    ${PCL_LIBRARIES}
-    ${OpenCV_LIBS}
-    nlohmann_json::nlohmann_json
-)
+############################
+# TOOLS
+############################
+if(BUILD_TOOLS)
+    # Omni2Colmap
+    add_executable(omni2colmap
+        utils/omni2colmap.cpp
+    )
+    target_link_libraries(omni2colmap
+        nlohmann_json::nlohmann_json
+    )
 
+    # Dense reconstruction
+    add_executable(dense_recon
+        utils/dense_reconstruction.cpp
+    )
+    target_link_libraries(dense_recon
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBS}
+        nlohmann_json::nlohmann_json
+    )
 
+    # MAP merger
+    add_executable(map_merger
+        utils/map_merger.cpp
+    )
+    target_link_libraries(map_merger
+        ${PCL_LIBRARIES}
+    )
 
-# Skeleton finder 3D test
-add_executable(skeleton_finder_3D_test
-    src/skeleton_finder_3D_test.cpp
-    src/skeleton_finder_3D.cpp
-    src/io.cpp
-    utils/quickhull/QuickHull.cpp
-    utils/A_star/A_star.cpp
-    src/pre_proc.cpp
-    src/path_finder.cpp
-)
+    # downsample
+    add_executable(downsample
+        utils/downsample.cpp
+    )
+    target_link_libraries(downsample
+        ${PCL_LIBRARIES}
+    )
 
-target_link_libraries(skeleton_finder_3D_test
-    ${PCL_LIBRARIES}
-    yaml-cpp
-)
+    # filter
+    add_executable(filter
+        utils/filter.cpp
+    )
+    target_link_libraries(filter
+        ${PCL_LIBRARIES}
+        pcl_filters
+    )
 
-# MAP merger
-add_executable(map_merger
-    utils/map_merger.cpp
-)
+    # cut_pcd
+    add_executable(z_thresh
+        utils/cut_pcd.cpp
+    )
+    target_link_libraries(z_thresh
+        ${PCL_LIBRARIES}
+    )
 
-target_link_libraries(map_merger
-    ${PCL_LIBRARIES}
-)
+    # cut_bbx
+    add_executable(cut_bbx
+        utils/cut_bbx.cpp
+    )
+    target_link_libraries(cut_bbx
+        ${PCL_LIBRARIES}
+    )
 
-# MAP merger
-add_executable(downsample
-    utils/downsample.cpp
-)
+    # flip_z
+    add_executable(flip_z
+        utils/flip_z.cpp
+    )
+    target_link_libraries(flip_z
+        ${PCL_LIBRARIES}
+    )
+endif()
 
-target_link_libraries(downsample
-    ${PCL_LIBRARIES}
-)
-
-add_executable(filter
-    utils/filter.cpp
-)
-
-target_link_libraries(filter
-    ${PCL_LIBRARIES}
-    pcl_filters
-)
-
-add_executable(z_thresh
-    utils/cut_pcd.cpp
-)
-
-target_link_libraries(z_thresh
-    ${PCL_LIBRARIES}
-)
-
-add_executable(cut_bbx
-    utils/cut_bbx.cpp
-)
-
-target_link_libraries(cut_bbx
-    ${PCL_LIBRARIES}
-)
-
-
-# Skeleton finder 3D test
-add_executable(skeleton_finder_3D_proc
-    src/skeleton_finder_3D_proc.cpp
-    src/skeleton_finder_3D.cpp
-    src/io.cpp
-    src/pre_proc.cpp
-    src/post_proc.cpp
-    src/path_finder.cpp
-    utils/quickhull/QuickHull.cpp
-    utils/A_star/A_star.cpp
-)
-
-target_link_libraries(skeleton_finder_3D_proc
-    ${PCL_LIBRARIES}
-    yaml-cpp
-)
-
-
-#add_executable(dense_recon_parallel
-#    utils/dense_reconstruction_parallel.cpp
-#)
-
-#target_link_libraries(dense_recon_parallel
-#    ${PCL_LIBRARIES}
-#    ${OpenCV_LIBS}
-#    nlohmann_json::nlohmann_json
-#    #${TORCH_LIBRARIES}
-#    #${CUDA_LIBRARIES}
-#)
-
+############################
+# LIBRARY
+############################
 
 add_library(SkeletonFinder
-    src/skeleton_finder_3D_test.cpp
     src/skeleton_finder_3D.cpp
     src/io.cpp
     src/pre_proc.cpp
     src/post_proc.cpp
     src/path_finder.cpp
+    src/graph.cpp
     utils/quickhull/QuickHull.cpp
     utils/A_star/A_star.cpp
 )
@@ -160,7 +170,99 @@ target_link_libraries(SkeletonFinder
     yaml-cpp
     Eigen3
 )
+
+############################
+# EXPERIMENTS
+############################
+if(BUILD_EXPERIMENTS)
+    add_executable(test_ekhoe
+        experiments/test_ekhoe_experiment.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+
+        experiments/objects.cpp
+        experiments/experiments.cpp
+    )
+    target_link_libraries(test_ekhoe
+        ${PCL_LIBRARIES}
+        yaml-cpp
+        nlohmann_json::nlohmann_json
+    )
+
+    add_executable(test_grid
+        experiments/test_grid_experiment.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+
+        experiments/experiments.cpp
+        experiments/baselines.cpp
+        experiments/objects.cpp
+    )
+    target_link_libraries(test_grid
+        ${PCL_LIBRARIES}
+        yaml-cpp
+        nlohmann_json::nlohmann_json
+    )
+
+    add_executable(test_prm
+        experiments/test_prm_experiment.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+
+        experiments/experiments.cpp
+        experiments/baselines.cpp
+        experiments/objects.cpp
+    )
+    target_link_libraries(test_prm
+        ${PCL_LIBRARIES}
+        yaml-cpp
+        nlohmann_json::nlohmann_json
+    )
+
+    add_executable(test_skeletonfinder
+        experiments/test_skeletonfinder_experiment.cpp
+        src/skeleton_finder_3D.cpp
+        src/io.cpp
+        src/pre_proc.cpp
+        src/post_proc.cpp
+        src/path_finder.cpp
+        src/graph.cpp
+        utils/quickhull/QuickHull.cpp
+        utils/A_star/A_star.cpp
+
+        experiments/experiments.cpp
+        experiments/baselines.cpp
+        experiments/objects.cpp
+    )
+    target_link_libraries(test_skeletonfinder
+        ${PCL_LIBRARIES}
+        yaml-cpp
+        nlohmann_json::nlohmann_json
+    )
+endif()
+
 ######################################################################
+# INSTALLATION
+######################################################################
+
 
 target_include_directories(SkeletonFinder PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>

@@ -4,102 +4,148 @@
 #include <pcl/io/pcd_io.h>
 
 
-// Add this new function to handle file writing
-void SkeletonFinder::saveToFile(const std::string& filename, const std::string& data) {
-    std::ofstream file(filename);
-    if (file.is_open()) {
-        file << data;
-        file.close();
-    } else {
-        std::cerr << "Unable to open file: " << filename << std::endl;
+
+
+void SkeletonFinder::saveNodes(const std::string& filename) {
+    nodes_pcl->height = 1;
+    nodes_pcl->width = nodes_pcl->points.size();
+    pcl::io::savePCDFileASCII(filename, *nodes_pcl);
+    cout << "Nodes saved to file: " << filename << endl;
+}
+
+
+void SkeletonFinder::saveConnections(const std::string& filename) {
+    std::fstream fs;
+    fs.open(filename, std::fstream::in | std::fstream::out | std::fstream::trunc);
+    // save connections to file
+    for (NodePtr cur_node : NodeList) {
+        for (NodePtr connect_node : cur_node->connected_Node_ptr) {
+        auto finder = find(NodeList.begin(), NodeList.end(), connect_node);
+        if (finder != NodeList.end()) {
+            fs << cur_node->coord(0) << " " << cur_node->coord(1) << " " << cur_node->coord(2) << "\n";
+            fs << connect_node->coord(0) << " " << connect_node->coord(1) << " " << connect_node->coord(2) << "\n";
+            fs << "\n";
+        }
+        }
     }
+    cout << "Connections saved to file: " << filename << endl;
 }
 
-void SkeletonFinder::visualization() {
-    //visStart();
-    //visNodesAndVertices();
-    //visPolygons();
-    //visFrontiers();
-    //visMap();
-    //visConnections();
+
+void SkeletonFinder::saveAdjMatrix(const std::string& filename) {
+    Eigen::MatrixXd adjacencyMatrix = getAdjMatrix(NodeList);
+    cout << "Adjacency matrix size: " << adjacencyMatrix.rows() << "x" << adjacencyMatrix.cols() << endl;
+
+    // save adjacency matrix to file (use file easy to open in python)
+    ofstream adjacencyMatrixFile;
+    adjacencyMatrixFile.open(filename);
+    for (int i = 0; i < adjacencyMatrix.rows(); i++) {
+        for (int j = 0; j < adjacencyMatrix.cols(); j++) {
+        adjacencyMatrixFile << adjacencyMatrix(i, j) << " ";
+        }
+        adjacencyMatrixFile << endl;
+    }
+
+    cout << "Adjacency matrix saved to file: " << filename << endl;
 }
 
-void SkeletonFinder::visNodesAndVertices() {
-    // nodes_pcl.clear();
-    //black_vertices_pcl.clear();
-    //white_vertices_pcl.clear();
-    //grey_vertices_pcl.clear();
-    
-    /*
+
+Eigen::MatrixXd SkeletonFinder::getAdjMatrix(vector<NodePtr> validNodeList) {
+
+  // could be optimized: only check for the upper triangle
+
+  int num_nodes = validNodeList.size();
+  cout << "Number of valid nodes: " << num_nodes << endl;
+  Eigen::MatrixXd adjMatrix(num_nodes, num_nodes);
+  // fill the adjacency matrix with 0s
+  adjMatrix.setZero();
+
+  for (int i = 0; i < num_nodes; i++) {
+    for (int j = 0; j < num_nodes; j++) {
+      NodePtr node1 = validNodeList[i];
+      NodePtr node2 = validNodeList[j];
+
+      if (i == j) {
+        adjMatrix(i, j) = 1;
+        continue;
+      }
+
+      auto finder = find(node1->connected_Node_ptr.begin(), node1->connected_Node_ptr.end(), node2);
+      if (finder != node1->connected_Node_ptr.end()) {
+        adjMatrix(i, j) = 1;
+        adjMatrix(j, i) = 1;
+      //} else {
+      //  adjMatrix(i, j) = 0;
+      //  adjMatrix(j, i) = 0;
+      //}
+      }
+    }
+  }
+  return adjMatrix;
+}
+
+
+void SkeletonFinder::loadNodes(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud) {
+    // Convert the point cloud into Node objects
+    NodeList.clear();
+    for (const auto& point : cloud->points) {
+        Eigen::Vector3d coord(point.x, point.y, point.z);
+        NodePtr node = new Node(coord, NULL);
+        recordNode(node);
+    }
+    cout << "Loaded " << nodes_pcl->points.size() << " nodes to pcl " << endl;
+}
+
+
+void SkeletonFinder::loadConnections(const std::string& filename) {
+    std::ifstream adjacencyMatrixFile(filename);
+    if (!adjacencyMatrixFile.is_open()) {
+        throw std::runtime_error("Couldn't open file: " + filename);
+    }
+
+    std::vector<std::vector<double>> matrixData;
+    std::string line;
+    while (std::getline(adjacencyMatrixFile, line)) {
+        std::istringstream iss(line);
+        std::vector<double> row((std::istream_iterator<double>(iss)), std::istream_iterator<double>());
+        matrixData.push_back(row);
+    }
+    adjacencyMatrixFile.close();
+
+    // Convert vector of vectors to Eigen::MatrixXd
+    size_t rows = matrixData.size();
+    size_t cols = rows > 0 ? matrixData[0].size() : 0;
+    Eigen::MatrixXd adjacencyMatrix(rows, cols);
+    for (size_t i = 0; i < rows; ++i) {
+        for (size_t j = 0; j < cols; ++j) {
+            adjacencyMatrix(i, j) = matrixData[i][j];
+        }
+    }
+
+    cout << "Loaded adjacency matrix of size " << rows << "x" << cols << " from file: " << filename << endl;
+
     int num_nodes = NodeList.size();
-    for (int i = num_nodes - 1; i >= 0; i--) {
-        if (NodeList.at(i)->rollbacked)
-            continue;
-        if (NodeList.at(i)->isGate)
-            continue;
-        // nodes_pcl.points.push_back(pcl::PointXYZ(NodeList.at(i)->coord(0),
-        // NodeList.at(i)->coord(1),
-        //                                          NodeList.at(i)->coord(2)));
+    if (num_nodes != adjacencyMatrix.rows() || num_nodes != adjacencyMatrix.cols()) {
+        throw std::runtime_error("Adjacency matrix size does not match number of nodes.");
+    }
 
-        for (VertexPtr v : NodeList.at(i)->black_vertices) {
-            if (v->type == BLACK) {
-                black_vertices_pcl.points.push_back(
-                    pcl::PointXYZ(v->coord(0), v->coord(1), v->coord(2)));
-            } else {
-                grey_vertices_pcl.points.push_back(
-                    pcl::PointXYZ(v->coord(0), v->coord(1), v->coord(2)));
+    for (int i = 0; i < num_nodes; ++i) {
+        NodePtr node = NodeList[i];
+        node->connected_Node_ptr.clear();
+        for (int j = 0; j < num_nodes; ++j) {
+            if (adjacencyMatrix(i, j) == 1 && i != j) { // Skip self-connections
+                node->connected_Node_ptr.push_back(NodeList[j]);
             }
         }
-        for (VertexPtr v : NodeList.at(i)->white_vertices) {
-            white_vertices_pcl.points.push_back(
-                pcl::PointXYZ(v->coord(0), v->coord(1), v->coord(2)));
-        }
-
-        if (!_visualize_all)
-            break;
     }
-    */
-
-    // Save point clouds to PCD files
-    size_t num_points = nodes_pcl->size();
-    nodes_pcl->height = 1;
-    nodes_pcl->width = num_points;
-    cout << "num points: " << num_points << endl;
-
-    /*
-    std::cout << "Points:" << std::endl;
-    for (const auto& point : nodes_pcl.points) {
-        std::cout << point.x << " " << point.y << " " << point.z << std::endl;
-    }
-
-    std::cout << "Black vertices:" << std::endl;
-    for (const auto& point : black_vertices_pcl.points) {
-        std::cout << point.x << " " << point.y << " " << point.z << std::endl;
-    }
-
-    std::cout << "White vertices:" << std::endl;
-    for (const auto& point : white_vertices_pcl.points) {
-        std::cout << point.x << " " << point.y << " " << point.z << std::endl;
-    }
-
-    std::cout << "Grey vertices:" << std::endl;
-    for (const auto& point : grey_vertices_pcl.points) {
-        std::cout << point.x << " " << point.y << " " << point.z << std::endl;
-    }
-    */
-
-    pcl::io::savePCDFileASCII("/workspace/ros2_ws/src/global_planner/resource/nodes.pcd", (*nodes_pcl));
-    
-    //pcl::io::savePCDFileASCII("black_vertices.pcd", black_vertices_pcl);
-    //pcl::io::savePCDFileASCII("white_vertices.pcd", white_vertices_pcl);
-    //pcl::io::savePCDFileASCII("grey_vertices.pcd", grey_vertices_pcl);
-    
+    cout << "Reconstructed connections between nodes." << endl;
 }
 
-void SkeletonFinder::visMap() {
-    //pcl::io::savePCDFileASCII("map.pcd", vis_map_pcl);
-}
 
+
+
+
+/*
 void SkeletonFinder::visConnections() {
     int node_count = 0;
     int connection_count = 0;
@@ -142,3 +188,4 @@ void SkeletonFinder::visConnections() {
         }
     }
 }
+*/

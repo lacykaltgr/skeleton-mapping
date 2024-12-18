@@ -1,3 +1,6 @@
+#ifndef ASTAR_H
+#define ASTAR_H
+
 #include <Eigen/Eigen>
 #include <cmath>
 #include <deque>
@@ -82,3 +85,5 @@ class AStar {
   //void visParents();
 };
 }  // namespace a_star
+
+#endif  // ASTAR

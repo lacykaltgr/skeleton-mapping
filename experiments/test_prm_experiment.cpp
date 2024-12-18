@@ -14,7 +14,6 @@
 #include <yaml-cpp/yaml.h>
 
 
-
 using namespace std;
 string config_filename;
 string pcd_filename;
@@ -25,11 +24,11 @@ int main(int argc, char **argv) {
     pcd_filename = argv[1];
     config_filename = argv[2];
     obj_filename = argv[3];
+    int num_points = atof(argv[4]);
     YAML::Node config = YAML::LoadFile(config_filename);
     
-    string experiment_name = "Ekhoe";
+    string experiment_name = "random_" + to_string(num_points);
     SkeletonFinderExperiment experiment(experiment_name, config["robot_type"].as<double>(), pcd_filename);
-
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
     pcl::PCDReader reader;
@@ -40,8 +39,9 @@ int main(int argc, char **argv) {
 
     
     SkeletonFinder skeleton_finder_3D(config);
-    skeleton_finder_3D.run_processing(cloud);   
-    skeleton_finder_3D.run_postprocessing();
+    skeleton_finder_3D.run_processing_random(cloud, num_points);   
+    skeleton_finder_3D.run_postprocess_edges();
 
     experiment.run_experiments(skeleton_finder_3D, obj_filename);
+  
 }

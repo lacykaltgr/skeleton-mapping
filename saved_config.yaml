@@ -8,27 +8,17 @@ z_max: 5
 
 base_height: 0.6
 base_radius: 0.5
-ground_robot: true
 connection_radius: 4.0
 too_close_radius: 1.0
+robot_type: 0
+raywalking_max_height_diff: 0.2
+exploration_mode: false
 
 # Start positions
 start:
   x: 1.0
   y: 0.0
   z: 1.0 # robot 
-
-#1.83343 2.9898 -0.0913357
-#3.41294 2.82653 0.32438
-path_start:
-  x: 1.83343
-  y: 1.9898
-  z: 1
-
-path_target:
-  x: 1.8
-  y: 2.4
-  z: 1
 
 # Thresholds
 frontier_creation_threshold: 0.3

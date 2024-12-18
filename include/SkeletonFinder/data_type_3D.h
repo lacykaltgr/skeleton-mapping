@@ -19,14 +19,8 @@ struct Node;
 typedef Node *NodePtr;
 
 typedef quickhull::Vector3<double> vec3;
-enum vertex_type { WHITE, BLACK, GREY };
+enum vertex_type { WHITE, BLACK, GREY, UNKNOWN };
 
-
-struct NodeNearestNeighbors {
-  int index;
-  Eigen::Vector3d coord;
-  vector<int> nearest_nodes;
-};
 
 struct Vertex {
   Eigen::Vector3d coord;
@@ -39,6 +33,8 @@ struct Vertex {
   int collision_node_index;
   int sampling_dire_index;
   double dis_to_center;
+  bool confirmed;
+  double max_raywalk_len;
 
   Vertex(Eigen::Vector3d coord_, Eigen::Vector3d dire_unit_sphere_, vertex_type type_) {
     coord = coord_;
@@ -48,6 +44,7 @@ struct Vertex {
     // Set default values
     visited = false;
     critical = false;
+    confirmed = false;
   }
 
   Vertex() {}
@@ -68,6 +65,7 @@ struct Facet {
   bool valid;
   bool visited;
   bool linked;
+  bool addedToPcl;
 
   Eigen::Vector3d center;
   Eigen::Vector3d seed_node_pos;
@@ -94,28 +92,18 @@ struct Facet {
     Eigen::Vector3d normal = v1.cross(v2);
     normal.normalize();
 
-    //cout << "normal calculated" << endl;
-
     double a = normal(0);
     double b = normal(1);
     double c = normal(2);
-    //Eigen::Vector3d abc;
-    //abc << a, b, c;
     Eigen::Vector3d abc = Eigen::Vector3d(a,b,c);
     double d = -abc.dot(vertices.at(0)->coord);
-
-    //TODO: 
-    //plane_equation << a, b, c, d;
-    //cout << a << " " << b << " " << c << " " << d << endl;
-
-    //plane_equation = Eigen::Vector4d(a,b,c,d);
     plane_equation << a, b, c, d;
-    //cout << "plane equation" << endl;
 
     // Set default value
     valid = false;
     visited = false;
     linked = false;
+    addedToPcl = false;
   }
 
   Facet() {}
@@ -145,7 +133,8 @@ struct Frontier {
 
   // valid means this frontier is clear at the time of processing
   bool valid;
-  bool deleted;
+  // for exploration mode
+  bool confirmed;
 
   NodePtr master_node;
   NodePtr gate_node;
@@ -167,7 +156,7 @@ struct Frontier {
 
     // Set default value
     valid = false;
-    deleted = false;
+    confirmed = false;
     gate_node = NULL;
   }
 
@@ -188,6 +177,7 @@ struct Node {
 
   vector<VertexPtr> black_vertices;
   vector<VertexPtr> white_vertices;
+  vector<VertexPtr> unknown_vertices;
   // vector<VertexPtr> poly_vertices;
   vector<FacetPtr> facets;
   vector<FrontierPtr> frontiers;
@@ -207,6 +197,7 @@ struct Node {
 
     black_vertices.clear();
     white_vertices.clear();
+    unknown_vertices.clear();
     facets.clear();
     connected_Node_ptr.clear();
 
@@ -239,6 +230,30 @@ struct PathCandidate {
   }
   PathCandidate() {}
   ~PathCandidate() {}
+};
+
+
+class Graph {
+public:
+    explicit Graph(int n) : adjacencyList(n) {}
+
+    inline void addEdge(int u, int v) {
+        adjacencyList[u].push_back(v);
+        adjacencyList[v].push_back(u);
+    }
+
+    const vector<int>& getNeighbors(int u) const {
+        return adjacencyList[u];
+    }
+
+    int size() const {
+        return adjacencyList.size();
+    }
+
+    void dfs(int node, vector<bool>& visited, vector<int>& component);
+
+private:
+    vector<vector<int>> adjacencyList;
 };
 
 #endif

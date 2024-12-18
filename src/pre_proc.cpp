@@ -12,8 +12,6 @@ using namespace Eigen;
 using namespace std;
 
 
-
-
 void SkeletonFinder::findBoundingBox(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) {
   bool findXmin = _x_min == -1;
   bool findXmax = _x_max == -1;
@@ -22,14 +20,18 @@ void SkeletonFinder::findBoundingBox(const pcl::PointCloud<pcl::PointXYZ>::Ptr m
   bool findZmin = _z_min == -1;
   bool findZmax = _z_max == -1;
 
-  _x_min = findXmin ? std::numeric_limits<double>::max() : _x_min;
-  _x_max = findXmax ? -std::numeric_limits<double>::max() : _x_max;
-  _y_min = findYmin ? std::numeric_limits<double>::max() : _y_min;
-  _y_max = findYmax ? -std::numeric_limits<double>::max() : _y_max;
-  _z_min = findZmin ? std::numeric_limits<double>::max() : _z_min;
-  _z_max = findZmax ? -std::numeric_limits<double>::max() : _z_max;
+  if (!findXmin && !findXmax && !findYmin && !findYmax && !findZmin && !findZmax) {
+    return;
+  }
 
-  for (int i = 0; i < map->points.size(); i++) {
+  _x_min = findXmin ? std::numeric_limits<double>::max() : _x_min;
+  _x_max = findXmax ? -std::numeric_limits<double>::min() : _x_max;
+  _y_min = findYmin ? std::numeric_limits<double>::max() : _y_min;
+  _y_max = findYmax ? -std::numeric_limits<double>::min() : _y_max;
+  _z_min = findZmin ? std::numeric_limits<double>::max() : _z_min;
+  _z_max = findZmax ? -std::numeric_limits<double>::min() : _z_max;
+
+  for (size_t i = 0; i < map->points.size(); i++) {
     if (findXmin && map->points[i].x < _x_min) {
       _x_min = map->points[i].x;
     }
@@ -53,11 +55,11 @@ void SkeletonFinder::findBoundingBox(const pcl::PointCloud<pcl::PointXYZ>::Ptr m
 
 
 void SkeletonFinder::addBbxToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr map) {
-  double x_length = _x_max - _x_min;
-  double y_length = _y_max - _y_min;
+  //double x_length = _x_max - _x_min;
+  //double y_length = _y_max - _y_min;
   // double z_length = _z_max - _z_min;
-  int x_num = ceil(x_length / _resolution) + 1;
-  int y_num = ceil(y_length / _resolution) + 1;
+  //int x_num = ceil(x_length / _resolution) + 1;
+  //int y_num = ceil(y_length / _resolution) + 1;
   // int z_num = ceil(z_length / _resolution) + 1;
 
   /*
@@ -106,9 +108,9 @@ void SkeletonFinder::setParam(
   int min_flowback_creation_threshold, double min_flowback_creation_radius_threshold,
   double min_node_radius, double search_margin, double max_ray_length,
   double max_expansion_ray_length, double max_height_diff, int sampling_density,
-  int max_facets_grouped, double resolution, 
-  bool bad_loop,
-  bool visualize_nbhd_facets, bool visualize_black_polygon
+  int max_facets_grouped, double resolution,  bool bad_loop,
+  double base_height, double base_radius, double connection_radius, double too_close_threshold,
+  int robot_type, double raywalking_max_height_diff, bool exploration_mode
 ) {
   _x_min = x_min;
   _x_max = x_max;
@@ -120,7 +122,6 @@ void SkeletonFinder::setParam(
   _start_y = start_y;
   _start_z = start_z;
 
-  _map_representation = map_representation;
   _frontier_creation_threshold = frontier_creation_threshold;
   _frontier_jump_threshold = frontier_jump_threshold;
   _frontier_split_threshold = frontier_split_threshold;
@@ -136,9 +137,13 @@ void SkeletonFinder::setParam(
   _max_facets_grouped = max_facets_grouped;
   _resolution = resolution;
 
-  _debug_mode = debug_mode;
   _bad_loop = bad_loop;
 
-  _visualize_nbhd_facets = visualize_nbhd_facets;
-  _visualize_black_polygon = visualize_black_polygon;
+  _base_height = base_height;
+  _base_radius = base_radius;
+  _connection_radius = connection_radius;
+  _too_close_threshold = too_close_threshold;
+  _robot_type = robot_type;
+  _raywalking_max_height_diff = raywalking_max_height_diff;
+  _exploration_mode = exploration_mode;
 }

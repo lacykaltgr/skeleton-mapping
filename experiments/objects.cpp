@@ -10,6 +10,15 @@
 
 using namespace std;
 
+MapObject::MapObject(string id, const string& object_tag, const Eigen::Vector3d& bbox_extent,
+              const Eigen::Vector3d& bbox_center, double bbox_volume) {
+    this->id = id;
+    this->object_tag = object_tag;
+    this->bbox_extent = bbox_extent;
+    this->bbox_center = bbox_center;
+    this->bbox_volume = bbox_volume;
+}
+
 
 vector<MapObject> loadMapObjects(string filename) {
   ifstream i(filename);
@@ -20,7 +29,7 @@ vector<MapObject> loadMapObjects(string filename) {
   for (nlohmann::json::iterator it = j.begin(); it != j.end(); ++it) {
     string object_name = it.key();
     nlohmann::json object = it.value();
-    int id = object["id"];
+    string id = object["id"];
     string object_tag = object["object_tag"];
     Eigen::Vector3d bbox_extent = Eigen::Vector3d(object["bbox_extent"][0], object["bbox_extent"][1], object["bbox_extent"][2]);
     Eigen::Vector3d bbox_center = Eigen::Vector3d(object["bbox_center"][0], object["bbox_center"][1], object["bbox_center"][2]);
@@ -34,7 +43,7 @@ vector<MapObject> loadMapObjects(string filename) {
 
 
 void initObjectFrontiers(vector<MapObject>& map_objects, SkeletonFinder& skeletonfinder) {
-  for (int i = 0; i < map_objects.size(); i++) {
+  for (size_t i = 0; i < map_objects.size(); i++) {
 
     MapObject map_object = map_objects[i];
     Eigen::Vector3d bbox_center = map_object.bbox_center;

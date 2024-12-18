@@ -1,5 +1,4 @@
 #include "SkeletonFinder/skeleton_finder_3D.h"
-#include "SkeletonFinder/objects.h"
 #include <math.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/io/pcd_io.h>
@@ -12,22 +11,18 @@
 #include <sstream>
 #include <vector>
 #include <yaml-cpp/yaml.h>
-#include <nlohmann/json.hpp>
 
 
 using namespace std;
 string config_file_name;
 string filename;
 
-
+// Custom class to store Gaussian parameters
 
 int main(int argc, char **argv) {
   filename = argv[1];
-  if (argc < 3) {
-    config_file_name = "/app/graph/3D_Sparse_Skeleton/3d_sparse_skeleton/polygon_generation/config.yaml";
-  } else {
-    config_file_name = argv[2];
-  }
+  string file_dir = filename.substr(0, filename.find_last_of("/\\"));
+  config_file_name = argv[2];
 
   YAML::Node config = YAML::LoadFile(config_file_name);
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
@@ -43,19 +38,15 @@ int main(int argc, char **argv) {
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::copyPointCloud(*cloud, *cloud_xyz);
 
-  vector<MapObject> map_objects = loadMapObjects("/workspace/ros2_ws/src/global_planner/libraries/polygon_generation/resource/obj_json_mapping.json");
-  initObjectFrontiers(map_objects, skeleton_finder_3D);
-
   skeleton_finder_3D.run_processing(cloud_xyz);
+  //skeleton_finder_3D.run_postprocessing();
 
-  double path_start_x = config["path_start"]["x"].as<double>();
-  double path_start_y = config["path_start"]["y"].as<double>();
-  double path_start_z = config["path_start"]["z"].as<double>();
-  double path_target_x = config["path_target"]["x"].as<double>();
-  double path_target_y = config["path_target"]["y"].as<double>();
-  double path_target_z = config["path_target"]["z"].as<double>();
-  skeleton_finder_3D.run_findpath(
-    path_start_x, path_start_y, path_start_z,
-    path_target_x, path_target_y, path_target_z
-  );
+      // save valid nodes to file
+  skeleton_finder_3D.saveNodes(file_dir + "/nodes.pcd");
+
+  // save connections to file
+  skeleton_finder_3D.saveConnections(file_dir + "/connections.txt");
+
+  // save adjacency matrix to file
+  skeleton_finder_3D.saveAdjMatrix(file_dir + "/adjacency_matrix.txt");
 }

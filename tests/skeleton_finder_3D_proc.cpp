@@ -16,16 +16,14 @@
 using namespace std;
 string config_file_name;
 string filename;
+string out_dir;
 
 // Custom class to store Gaussian parameters
 
 int main(int argc, char **argv) {
   filename = argv[1];
-  if (argc < 3) {
-    config_file_name = "/app/graph/3D_Sparse_Skeleton/3d_sparse_skeleton/polygon_generation/config.yaml";
-  } else {
-    config_file_name = argv[2];
-  }
+  out_dir = argv[2];
+  config_file_name = argv[3];
 
   YAML::Node config = YAML::LoadFile(config_file_name);
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
@@ -43,14 +41,23 @@ int main(int argc, char **argv) {
 
   skeleton_finder_3D.run_processing(cloud_xyz);
 
-  double path_start_x = config["path_start"]["x"].as<double>();
-  double path_start_y = config["path_start"]["y"].as<double>();
-  double path_start_z = config["path_start"]["z"].as<double>();
-  double path_target_x = config["path_target"]["x"].as<double>();
-  double path_target_y = config["path_target"]["y"].as<double>();
-  double path_target_z = config["path_target"]["z"].as<double>();
-  skeleton_finder_3D.run_findpath(
-    path_start_x, path_start_y, path_start_z,
-    path_target_x, path_target_y, path_target_z
-  );
+      // save valid nodes to file
+  skeleton_finder_3D.saveNodes(out_dir + "/nodes_0.pcd");
+
+  // save connections to file
+  skeleton_finder_3D.saveConnections(out_dir + "/connections_0.txt");
+
+  // save adjacency matrix to file
+  skeleton_finder_3D.saveAdjMatrix(out_dir + "/adjacency_matrix_0.txt");
+
+  skeleton_finder_3D.run_postprocessing();
+
+    // save valid nodes to file
+  skeleton_finder_3D.saveNodes(out_dir + "/nodes.pcd");
+
+  // save connections to file
+  skeleton_finder_3D.saveConnections(out_dir + "/connections.txt");
+
+  // save adjacency matrix to file
+  skeleton_finder_3D.saveAdjMatrix(out_dir + "/adjacency_matrix.txt");
 }

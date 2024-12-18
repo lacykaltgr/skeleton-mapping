@@ -1,36 +1,53 @@
+#include "SkeletonFinder/skeleton_finder_3D.h"
+#include "SkeletonFinder/data_type_3D.h"
 #include <iostream>
 #include <vector>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/connected_components.hpp>
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace std;
-using namespace boost;
 
-// Define the graph structure using Boost's adjacency list
-typedef adjacency_list<vecS, vecS, undirectedS> Graph;
+// Helper function to perform DFS and mark components
+void Graph::dfs(int node, vector<bool>& visited, vector<int>& component) {
+    visited[node] = true;
+    component.push_back(node);
 
-// Function to get disconnected components using Boost
-vector<vector<int>> getDisconnectedComponents(const vector<NodePtr>& nodes) {
+    for (int neighbor : getNeighbors(node)) {
+        if (!visited[neighbor]) {
+            dfs(neighbor, visited, component);
+        }
+    }
+}
+
+// Function to get disconnected components without Boost
+vector<vector<int>> SkeletonFinder::getDisconnectedComponents(vector<NodePtr> nodes) {
     int numNodes = nodes.size();
     Graph graph(numNodes);
 
-    // Add edges to the graph based on the node connections
+    // Assign index to each node
+    for (int i = 0; i < numNodes; ++i) {
+        nodes[i]->index = i;
+    }
+
+    // Add edges to the graph based on node connections
     for (int i = 0; i < numNodes; ++i) {
         for (auto& neighbor : nodes[i]->connected_Node_ptr) {
             int neighborIndex = neighbor->index;
-            add_edge(i, neighborIndex, graph);
+            graph.addEdge(i, neighborIndex);
         }
     }
 
-    // Vector to store the component index for each node
-    vector<int> component(numNodes);
-    int numComponents = connected_components(graph, &component[0]);
+    // Find all connected components using DFS
+    vector<bool> visited(numNodes, false);
+    vector<vector<int>> components;
 
-    // Group nodes by component
-    vector<vector<int>> components(numComponents);
     for (int i = 0; i < numNodes; ++i) {
-        components[component[i]].push_back(i);
+        if (!visited[i]) {
+            vector<int> component;
+            graph.dfs(i, visited, component);
+            components.push_back(component);
+        }
     }
 
     // Sort components by size in descending order
