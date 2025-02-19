@@ -34,12 +34,13 @@ struct Vertex {
   int sampling_dire_index;
   double dis_to_center;
   bool confirmed;
-  double max_raywalk_len;
+  double max_valid_len;
 
   Vertex(Eigen::Vector3d coord_, Eigen::Vector3d dire_unit_sphere_, vertex_type type_) {
     coord = coord_;
     dire_unit_sphere = dire_unit_sphere_;
     type = type_;
+    max_valid_len = 0;
 
     // Set default values
     visited = false;
@@ -134,7 +135,8 @@ struct Frontier {
   // valid means this frontier is clear at the time of processing
   bool valid;
   // for exploration mode
-  bool confirmed;
+  int confirmed;
+  int max_valid_len;
 
   NodePtr master_node;
   NodePtr gate_node;
@@ -156,7 +158,8 @@ struct Frontier {
 
     // Set default value
     valid = false;
-    confirmed = false;
+    confirmed = 0;
+    max_valid_len = 0;
     gate_node = NULL;
   }
 

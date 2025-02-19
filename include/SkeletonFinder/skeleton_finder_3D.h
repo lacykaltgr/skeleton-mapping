@@ -100,6 +100,9 @@ class SkeletonFinder {
   // Raywalking max height diff
   double _raywalking_max_height_diff;
 
+  // Min hit ratio
+  double _min_hit_ratio;
+
   // Exploration mode
   bool _exploration_mode;
 
@@ -317,6 +320,7 @@ class SkeletonFinder {
     config_map["too_close_threshold"] = _too_close_threshold;
     config_map["robot_type"] = static_cast<double>(_robot_type);  // Convert int to double
     config_map["raywalking_max_height_diff"] = _raywalking_max_height_diff;
+    config_map["min_hit_ratio"] = _min_hit_ratio;
     config_map["exploration_mode"] = static_cast<double>(_exploration_mode);  // Convert bool to double
     config_map["frontier_creation_threshold"] = _frontier_creation_threshold;
     config_map["frontier_jump_threshold"] = _frontier_jump_threshold;

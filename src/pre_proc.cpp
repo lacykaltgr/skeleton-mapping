@@ -110,7 +110,7 @@ void SkeletonFinder::setParam(
   double max_expansion_ray_length, double max_height_diff, int sampling_density,
   int max_facets_grouped, double resolution,  bool bad_loop,
   double base_height, double base_radius, double connection_radius, double too_close_threshold,
-  int robot_type, double raywalking_max_height_diff, bool exploration_mode
+  int robot_type, double raywalking_max_height_diff, double min_hit_ratio, bool exploration_mode
 ) {
   _x_min = x_min;
   _x_max = x_max;
@@ -145,5 +145,6 @@ void SkeletonFinder::setParam(
   _too_close_threshold = too_close_threshold;
   _robot_type = robot_type;
   _raywalking_max_height_diff = raywalking_max_height_diff;
+  _min_hit_ratio = min_hit_ratio;
   _exploration_mode = exploration_mode;
 }

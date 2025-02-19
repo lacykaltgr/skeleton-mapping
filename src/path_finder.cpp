@@ -347,6 +347,8 @@ double SkeletonFinder::calculateSafeRadius(NodePtr node, NodePtr connected_node)
 }
 
 bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  // check if path is clear
+  // rayflying for aerial robots, raywalking for ground robots
   if (_robot_type == 0) {
     return canRayWalk(pos1, pos2, _base_radius, _raywalking_max_height_diff);
   } else if (_robot_type == 1) {
@@ -359,6 +361,8 @@ bool SkeletonFinder::checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2) 
 
 
 double SkeletonFinder::checkPathClearLength(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  // check the length of the clear path from pos1 to pos2
+  // rayflying for aerial robots, raywalking for ground robots
   if (_robot_type == 0) {
     return rayWalkingLen(pos1, pos2, _base_radius, _raywalking_max_height_diff);
   } else if (_robot_type == 1) {
@@ -370,11 +374,44 @@ double SkeletonFinder::checkPathClearLength(Eigen::Vector3d pos1, Eigen::Vector3
 }
 
 
+bool SkeletonFinder::checkPathClearAndValid(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  if (_robot_type == 0) {
+    return canRayWalk(pos1, pos2, _base_radius, _raywalking_max_height_diff);
+  } else if (_robot_type == 1) {
+    bool canRayFly = canRayFly(pos1, pos2, _base_radius);
+    bool canRayFlyValid = canRayFlyValid(pos1, pos2, _base_radius, _min_hit_ratio);
+    return canRayFly && canRayFlyValid;
+  } else {
+    cout << "Robot type not supported!" << endl;
+    return false;
+  }
+}
 
-// new era
+// return <clear length, valid length pair>
+pair<double, double> SkeletonFinder::checkPathClearAndValidLength(Eigen::Vector3d pos1, Eigen::Vector3d pos2) {
+  if (_robot_type == 0) {
+    // maybe could check with larger height diff to differentiate between valid and clear path
+    double rayWalkLen = rayWalkingLen(pos1, pos2, _base_radius, _raywalking_max_height_diff);
+    return pair<double, double>(rayWalkLen, rayWalkLen);
+  } else if (_robot_type == 1) {
+    double valid = rayFlyingValidLen(pos1, pos2, _base_radius, _min_hit_ratio);
+    double clear = rayFlyingLen(pos1, pos2, _base_radius);
+    if (valid > clear) valid = clear;
+    return pair<double, double>(clear, valid);
+  } else {
+    cout << "Robot type not supported!" << endl;
+    return std::numeric_limits<double>::min();
+  }
+}
+
+
 
 bool SkeletonFinder::canRayFly(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius) {
   return fabs(rayFlyingLen(pos1, pos2, base_radius) - (pos2 - pos1).norm()) < 1e-4;
+}
+
+bool SkeletonFinder::canRayFlyValid(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double min_hit_ratio) {
+  return fabs(rayFlyingValidLen(pos1, pos2, base_radius, min_hit_ratio) - (pos2 - pos1).norm()) < 1e-4;
 }
 
 bool SkeletonFinder::canRayWalk(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double max_step_height=0.2) {
@@ -400,6 +437,35 @@ double SkeletonFinder::rayFlyingLen(Eigen::Vector3d pos1, Eigen::Vector3d pos2, 
   if (collisionCheck(pos2, base_radius)) {
     return (pos2 - begin_pos).norm() - step_length;
   }
+  return (pos2 - begin_pos).norm();
+}
+
+double SkeletonFinder::rayFlyingValidLen(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double min_hit_ratio) {
+  double length = (pos2 - pos1).norm();
+  double step_length = _resolution;
+
+  Eigen::Vector3d step = step_length * (pos2 - pos1) / length;
+  int num_steps = ceil(length / step_length);
+
+  Eigen::Vector3d forward = (pos2 - pos1).normalized();
+  Eigen::Vector3d begin_pos = pos1;
+  for (int i = 0; i < num_steps; i++) {
+    Eigen::Vector3d check_pos = begin_pos + i * step;
+    //if (collisionCheck(check_pos, base_radius)) {
+    //  return (check_pos - begin_pos).norm() - step_length;
+    //}
+
+    // check if hit ratio is enough -> path is valid
+    if (i > 0) {
+      double hit_ratio = checkHitRatio(check_pos, forward, base_radius);
+      if (hit_ratio < min_hit_ratio) {
+        return (check_pos - begin_pos).norm() - step_length;
+      }
+    }
+  }
+  //if (collisionCheck(pos2, base_radius)) {
+  //  return (pos2 - begin_pos).norm() - step_length;
+  //}
   return (pos2 - begin_pos).norm();
 }
 
@@ -459,6 +525,34 @@ double SkeletonFinder::checkFloorHeight(Eigen::Vector3d base_pos, double base_ra
   }
   double floor_height = raycast_result.first(2);
   return floor_height;
+}
+
+double SkeletonFinder::checkHitRatio(Eigen::Vector3d base_pos, Eigen::Vector3d forward_dir, double base_radius, double cut_off_length = 3.0) {
+  Eigen::Vector3d downwards(0, 0, -1);
+  double phi = 2 * M_PI; 
+  double x, y, z, theta;
+  // circle perimeter / resolution = sampling density
+  int num_samples = (int) phi * cut_off_length / _search_margin;
+  int num_hits = 0;
+  
+
+  for (int i = 0; i < num_samples; i++) {
+    theta = phi * ((double)i / num_samples);  // Angle for each sample
+
+    // Compute z (up) and y (right) on the unit circle
+    x = 0.0;
+    y = cos(theta);
+    z = sin(theta);
+
+    Eigen::Vector3d sample_direction(x, y, z);
+    Eigen::Vector3d direction = forward_dir + sample_direction;
+    pair<Vector3d, int> raycast_result = raycastOnRawMap(base_pos, direction, cut_off_length, _search_margin);
+    if (raycast_result.second != -2) {
+      num_hits++;
+    }
+  }
+
+  return (double)num_hits / num_samples;
 }
 
 

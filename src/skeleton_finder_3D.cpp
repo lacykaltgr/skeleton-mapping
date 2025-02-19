@@ -23,7 +23,7 @@ SkeletonFinder::SkeletonFinder(YAML::Node &config) {
     config["max_expansion_ray_length"].as<double>(), config["max_height_diff"].as<double>(), config["sampling_density"].as<int>(),
     config["max_facets_grouped"].as<int>(), config["resolution"].as<double>(), config["bad_loop"].as<bool>(),
     config["base_height"].as<double>(), config["base_radius"].as<double>(), config["connection_radius"].as<double>(), config["too_close_threshold"].as<double>(),
-    config["robot_type"].as<int>(), config["raywalking_max_height_diff"].as<double>(), config["exploration_mode"].as<bool>()
+    config["robot_type"].as<int>(), config["raywalking_max_height_diff"].as<double>(), config["min_hit_ratio"].as<double>(), config["exploration_mode"].as<bool>()
   );
 
   nodes_pcl = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
@@ -386,28 +386,15 @@ pair<Vector3d, int> SkeletonFinder::raycast(Vector3d ray_source,
                                             double cut_off_length) {
   double clearance = radiusSearch(ray_source).first;
   if (clearance < cut_off_length) {
-    // Eigen::Vector3d offset = _resolution * direction;
     Eigen::Vector3d current_pos = ray_source + clearance * direction;
-    // int cnt = 0;
     double length = clearance;
-    // ROS_ERROR("Ray_source: %f, %f, %f", ray_source(0), ray_source(1),
-    // ray_source(2)); ROS_ERROR("Direction:%f, %f, %f", direction(0),
-    // direction(1), direction(2));
-
-    // while (cnt * _resolution <= cut_off_length) {
-    // while (cnt * _resolution <= cut_off_length - clearance) {
     while (length <= cut_off_length) {
       pair<double, int> rs = radiusSearch(current_pos);
       double radius = rs.first;
-      // ROS_WARN("radiusSearch value: %f", radius);
-
       if (radius < _search_margin) {
         pair<Vector3d, int> return_pair(current_pos, rs.second);
         return return_pair;
       }
-
-      // current_pos += offset;
-      // cnt++;
       current_pos += radius * direction;
       length += radius;
     }
@@ -1394,53 +1381,43 @@ void SkeletonFinder::addFacetsToPcl(NodePtr nodePtr) {
   new_poly->setInputCloud(poly_pcl);
   kdtreesForPolys.push_back(new_poly);
 }
-
+// process confirmed frontiers
 bool SkeletonFinder::processFrontier(FrontierPtr curFtrPtr) {
-  // Gate node: midpoint of frontier
-  NodePtr gate;
-  if (curFtrPtr->gate_node == NULL) {
-    gate = new Node(curFtrPtr->proj_center, curFtrPtr, true);
-    curFtrPtr->gate_node = gate;
-  } else {
-    gate = curFtrPtr->gate_node;
-  }
-
-  bool floor = checkFloor(gate);
-  bool bbx = checkWithinBbx(gate->coord);
-  bool path_clear = true;
-  if (_exploration_mode) {
-      path_clear = checkPathClear(gate->coord, curFtrPtr->master_node->coord) &&
-                    checkPathClear(gate->coord, curFtrPtr->next_node_pos);
-  }
-
-  if (!floor || !bbx || !path_clear) {
-    gate->rollbacked = true;
-    return false;
-  }
-
-  // Center node
-  NodePtr new_node = new Node(curFtrPtr->next_node_pos, curFtrPtr);
-  bool init_success = initNode(new_node);
-
-  if (init_success) {
-    initNode(gate);
-    // double-sided pointers
-    curFtrPtr->master_node->connected_Node_ptr.push_back(gate);
-    gate->connected_Node_ptr.push_back(curFtrPtr->master_node);
-    gate->connected_Node_ptr.push_back(new_node);
-    new_node->connected_Node_ptr.push_back(gate);
-  } else {
-    new_node->rollbacked = true;
-    if (gate->connected_Node_ptr.empty()) {
-      gate->rollbacked = true;
-      curFtrPtr->valid = false;
-      for (auto f : curFtrPtr->facets) {
-        f->valid = false;
-      }
+    // Gate node: midpoint of frontier
+    NodePtr gate;
+    if (curFtrPtr->gate_node == NULL) {
+        gate = new Node(curFtrPtr->proj_center, curFtrPtr, true);
+        curFtrPtr->gate_node = gate;
+    } else {
+        gate = curFtrPtr->gate_node;
     }
-  }
 
-  return init_success;
+    if (!checkWithinBbx(gate->coord) || !checkFloor(gate) ) {
+        gate->rollbacked = true;
+        return false;
+    }
+
+    // Center node
+    NodePtr new_node = new Node(curFtrPtr->next_node_pos, curFtrPtr);
+    bool init_success = initNode(new_node);
+    if (init_success) {
+        initNode(gate);
+        curFtrPtr->master_node->connected_Node_ptr.push_back(gate);
+        gate->connected_Node_ptr.push_back(curFtrPtr->master_node);
+        gate->connected_Node_ptr.push_back(new_node);
+        new_node->connected_Node_ptr.push_back(gate);
+    } else {
+        new_node->rollbacked = true;
+        if (gate->connected_Node_ptr.empty()) {
+            gate->rollbacked = true;
+            curFtrPtr->valid = false;
+            for (auto f : curFtrPtr->facets) {
+                f->valid = false;
+            }
+        }
+    }
+
+    return init_success;
 }
 
 
@@ -1463,10 +1440,6 @@ bool SkeletonFinder::checkFloor(NodePtr node) {
 
   pair<Vector3d, int> raycast_result =
       raycastOnRawMap(node->coord, downwards, _max_ray_length);
-  // ROS_ERROR("raycast result: %d", raycast_result.second);
-  // ROS_ERROR("raycast result: (%f, %f, %f)", raycast_result.first(0),
-  // raycast_result.first(1),
-  //           raycast_result.first(2));
 
   if (raycast_result.second == -2) {
     // ROS_INFO("Floor not found within max_ray_length");
