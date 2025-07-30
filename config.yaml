@@ -13,6 +13,7 @@ too_close_threshold: 1.0 # 1.0
 robot_type: 0
 raywalking_max_height_diff: 0.2
 exploration_mode: true
+min_hit_ratio: 0.5
 
 # Start positions
 start:

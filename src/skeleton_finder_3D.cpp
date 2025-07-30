@@ -89,7 +89,7 @@ inline pair<double, int> SkeletonFinder::radiusSearch(Vector3d &search_Pt) {
   return return_pair;
 }
 
-inline double SkeletonFinder::radiusSearchOnRawMap(Vector3d &search_Pt) {
+double SkeletonFinder::radiusSearchOnRawMap(Vector3d &search_Pt) {
 
   pcl::PointXYZ searchPoint;
   searchPoint.x = search_Pt(0);
@@ -229,7 +229,7 @@ void SkeletonFinder::skeletonExpansion(Eigen::Vector3d startPt) {
   }
 }
 
-bool SkeletonFinder::initNode(NodePtr curNodePtr) {
+bool SkeletonFinder::initNode_0(NodePtr curNodePtr) {
   auto begin = chrono::high_resolution_clock::now();
   auto prev = begin;
   chrono::high_resolution_clock::time_point curr;
@@ -659,7 +659,7 @@ void SkeletonFinder::identifyFrontiers(NodePtr node) {
   for (VertexPtr bv : node->black_vertices) {
     if (onCeilOrFloor(bv->coord) != 0 && !bv->critical)
       continue;
-    auto dir = node->sampling_directions.at(bv->sampling_dire_index)
+    auto dir = node->sampling_directions.at(bv->sampling_dire_index);
     bv_for_mesh.push_back(dir);
     bv->critical = true;
   }
@@ -1035,7 +1035,7 @@ void SkeletonFinder::findFlowBack(NodePtr node) {
     int radius_vertices = getVerticesRadius(flow_back_frontier_log.at(i));
     if (n_vertices < _min_flowback_creation_threshold 
         && radius_vertices < _min_flowback_creation_radius_threshold) 
-        continue
+        continue;
 
     if (pending_frontier_index.empty())
       pending_frontier_index.push_back(i);

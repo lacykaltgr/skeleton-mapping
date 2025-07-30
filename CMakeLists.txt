@@ -156,6 +156,7 @@ endif()
 
 add_library(SkeletonFinder
     src/skeleton_finder_3D.cpp
+    src/exploration.cpp
     src/io.cpp
     src/pre_proc.cpp
     src/post_proc.cpp

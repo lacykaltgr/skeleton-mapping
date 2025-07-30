@@ -88,7 +88,7 @@ void SkeletonFinder::run_postprocess_edges() {
     fillNodesPcl(-1, _base_radius);
   }
 
-  int nEdges = drawEdgesRawWalking(NodeList, _connection_radius);
+  drawEdgesRawWalking(NodeList, _connection_radius);
 
   vector<vector<int>> components = getDisconnectedComponents(NodeList);
   cout << "Number of components: " << components.size() << endl;

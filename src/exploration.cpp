@@ -1,23 +1,40 @@
-typedef pcd::PointCloud<pcl::PointXYZ> PointCloud;
-typedef chrono::high_resolution_clock clock;
-typedef chrono::duration<double> duration;
+#include "SkeletonFinder/skeleton_finder_3D.h"
+
+#include <chrono>
+
+typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
 
 
 // verifyFrontier: raycasting and checking if the frontier is valid
 // processFrontier: initializing new node and adding it to the skeleton
 
 
-void SkeletonFinder::initSkeleton(Eigen::Vector3d start_pt) {
+bool SkeletonFinder::initSkeleton(Eigen::Vector3d start_pt, Eigen::Vector3d start_dir, const PointCloud::Ptr map_pcl) {
     // pre-computed values for further computations
     genSamplesOnUnitSphere();
     identifyBwFacets();
 
+    Eigen::Vector3d target_pos = start_pt + 10 * start_dir.normalized();
+    kdtreeForRawMap.setInputCloud(map_pcl);
+    double valid_distance = rayFlyingValidLenInverse(start_pt, target_pos, 
+                                                    _base_radius, _min_hit_ratio);
+    cout << "First valid distance: " << valid_distance << endl;
+    
+    if (valid_distance > 4.0) {
+        cout << "Initial location not found" << endl;
+        return false;
+    } 
+
+    Eigen::Vector3d initial_location = start_pt + valid_distance * start_dir;
+    cout << "Initial location: " << initial_location << endl;
+
     // initialize the start node
-    NodePtr start = new Node(start_pt, NULL);
+    NodePtr start = new Node(initial_location, NULL);
     // initialize vertices for the start node
     initBlackAndWhiteVertices(start);
     // add node to the skeleton
-    recordNode(curNodePtr);
+    recordNode(start);
+    return true;
 }
 
 void SkeletonFinder::updateSkeleton(const PointCloud::Ptr update_map_pcl) {
@@ -29,7 +46,7 @@ void SkeletonFinder::updateSkeleton(const PointCloud::Ptr update_map_pcl) {
     // point cloud map update
     kdtreeForRawMap.setInputCloud(update_map_pcl);
         
-    cout << "Updating skeleton..." << endl;
+    cout << "Updating skeleton with " << NodeList.size() << " nodes..." << endl;
     // 1. update relevant node vertices based on new map
     // 2. update known frontiers based on new map
     // 3. update verify known frontiers based on new map
@@ -38,13 +55,18 @@ void SkeletonFinder::updateSkeleton(const PointCloud::Ptr update_map_pcl) {
     // loop through all nodes in the skeleton
     for (NodePtr node: NodeList) {
         // gate nodes are not updated
-        if (node->isGate) 
+        if (node->isGate) {
+            cout << "Gate node." << endl;
             continue;
+        }
 
         // check for relevant unconfirmed frontiers
         // too far away, no need to update
-        if (radiusSearchOnRawMap(node->coord) > _max_ray_length + _max_expansion_ray_length)
+        if (radiusSearchOnRawMap(node->coord) > _max_ray_length + _max_expansion_ray_length) {
+            cout << "Node too very far away." << endl;
             continue;
+        }
+            
         for (FrontierPtr ftr: node->frontiers) {
             // if frontier is confirmed, no need to update
             if (ftr->confirmed)
@@ -53,20 +75,30 @@ void SkeletonFinder::updateSkeleton(const PointCloud::Ptr update_map_pcl) {
             Eigen::Vector3d ftr_valid = ftr->proj_center +
                          ftr->outwards_unit_normal * (2*_search_margin + ftr->max_valid_len);
             // if frontier is too far away, no need to update
-            if (radiusSearchOnRawMap(ftr_valid) < _max_ray_length)
+            if (radiusSearchOnRawMap(ftr_valid) < _max_ray_length) {
                 pending_frontiers.push_back(ftr);
+                cout << "Relevant frontier found." << endl;
+            }
+                
         }
 
         // if node is confirmed, no need to update
-        if (checkNodeConfirmed(node))
+        if (checkNodeConfirmed(node)) {
+            cout << "Node confirmed." << endl;
             // TODO: post process confirmed nodes
-            continue
+            continue;
+        }
+
         
         // node not relevant for map segment
-        if (radiusSearchOnRawMap(node->coord) > _max_ray_length)
+        if (radiusSearchOnRawMap(node->coord) > _max_ray_length) {
+            cout << "Node too far away." << endl;
             continue;
+        }
+
         
         // update node vertices, facets, frontiers
+        cout << "Updating node..." << endl;
         updateNode(node);
     }
     
@@ -85,19 +117,15 @@ void SkeletonFinder::updateSkeleton(const PointCloud::Ptr update_map_pcl) {
 }
 
 
-void SkeletonFinder::visualizeSkeleton() {
-    // visualize the skeleton
-
-}
-
-
 void SkeletonFinder::initBlackAndWhiteVertices(NodePtr nodePtr) {
     vector<Eigen::Vector3d>::iterator it;
     for (it = sample_directions.begin(); it != sample_directions.end(); it++) {
         int index = nodePtr->sampling_directions.size();
         nodePtr->sampling_directions.push_back(vec3((*it)(0), (*it)(1), (*it)(2)));
 
-        newVertex += (*it) * _max_ray_length;
+        // TODO: ez nem biztos
+        Eigen::Vector3d newVertex = nodePtr->coord;
+        //newVertex += (*it) * _max_ray_length;
         VertexPtr new_unknown_vertex = new Vertex(newVertex, (*it), UNKNOWN);
         new_unknown_vertex->sampling_dire_index = index;
         nodePtr->unknown_vertices.push_back(new_unknown_vertex);
@@ -115,17 +143,21 @@ void SkeletonFinder::updateBlackAndWhiteVertices(NodePtr node) {
     // to simplify: valid length cannot be greater than clear length
     for (VertexPtr v: node->unknown_vertices) {
         // check last validated length
-        double source = node->coord + v->dire_unit_sphere * v->max_valid_len;
-        pair<double, double> stats = checkPathClearAndValidLength(source, v->coord);
+        Eigen::Vector3d source = node->coord + v->dire_unit_sphere * v->max_valid_len;
+        Eigen::Vector3d target = node->coord + v->dire_unit_sphere * _max_ray_length;
+        pair<double, double> stats = checkPathClearAndValidLength(source, target);
         double clearence = stats.first;
         double valid = stats.second;
 
         // up to this point, the path is clear and valid
         v->max_valid_len = valid;
+
+        cout << "Vertex clearence: " << clearence << ", valid: " << valid << endl;
         // path is not valid, stays unknown
         if (clearence > valid && clearence < _max_ray_length)
             continue;
         
+        cout << "New vertex confirmed." << endl;
         // path is valid, where reachable, create new vertex
         v->confirmed = true;
         v->coord = source + v->dire_unit_sphere * clearence;
@@ -135,20 +167,19 @@ void SkeletonFinder::updateBlackAndWhiteVertices(NodePtr node) {
         if (clearence < _max_ray_length) {
             // create a new black vertex
             v->type = BLACK;
-            nodePtr->black_vertices.push_back(new_black_vertex);
+            node->black_vertices.push_back(v);
         } else {
             // create a new white vertex
             v->type = WHITE;
-            v->confirmed = true;
-            nodePtr->white_vertices.push_back(new_white_vertex);
+            node->white_vertices.push_back(v);
         }
     }
 
     // remove confirmed vertices from unknown vertices
     for (VertexPtr v: confirmed_vertices) {
-        nodePtr->unknown_vertices.erase(
-            remove(nodePtr->unknown_vertices.begin(), nodePtr->unknown_vertices.end(), v), 
-            nodePtr->unknown_vertices.end()
+        node->unknown_vertices.erase(
+            remove(node->unknown_vertices.begin(), node->unknown_vertices.end(), v), 
+            node->unknown_vertices.end()
         );
     }
 }
@@ -156,17 +187,7 @@ void SkeletonFinder::updateBlackAndWhiteVertices(NodePtr node) {
 
 bool SkeletonFinder::checkNodeConfirmed(NodePtr node) {
     // check if all vertices are confirmed
-    for (VertexPtr v: node->black_vertices) {
-        if (!v->confirmed) {
-            return false;
-        }
-    }
-    for (VertexPtr v: node->white_vertices) {
-        if (!v->confirmed) {
-            return false;
-        }
-    }
-    return true;
+    return node->unknown_vertices.empty();
 }
 
 
@@ -181,7 +202,7 @@ bool SkeletonFinder::initNode(NodePtr curNodePtr) {
     if (!checkFloor(curNodePtr))
         return false;
 
-    if (!currNodePtr->isGate)
+    if (!curNodePtr->isGate)
         if (!updateNode(curNodePtr))
             return false;
 
@@ -230,10 +251,13 @@ bool SkeletonFinder::updateNode(NodePtr curNodePtr) {
 
     // add relevant frontiers from previous updates
     for (FrontierPtr ftr: curNodePtr->frontiers) {
-        if (!ftr->confirmed)
+        if (!ftr->confirmed) {
+
             if (radiusSearchOnRawMap(ftr->proj_center) < _max_ray_length) {
                 pending_frontiers.push_back(ftr);
             }
+        }
+
     }
     
     // TODO: only check for confirmed black vertices
@@ -310,7 +334,7 @@ bool SkeletonFinder::verifyFrontierVariations(FrontierPtr cur_frontier) {
 
 // returns true if the frontier is confirmed
 bool SkeletonFinder::verifyFrontierExploration(FrontierPtr ftr_ptr) {
-    Eigen::Vector3d center = ftr_ptr->proj_center
+    Eigen::Vector3d center = ftr_ptr->proj_center;
     Eigen::Vector3d normal = ftr_ptr->outwards_unit_normal;
     
 
@@ -318,7 +342,7 @@ bool SkeletonFinder::verifyFrontierExploration(FrontierPtr ftr_ptr) {
     Eigen::Vector3d target = normal * _max_expansion_ray_length;
 
     // check if the frontier is too near to the obstacle
-    pair<double, int> rs_result = radiusSearch(raycast_start_pt);
+    pair<double, int> rs_result = radiusSearch(source);
     if (rs_result.first < _search_margin) {
         ftr_ptr->valid = false;
         return true;
@@ -354,159 +378,4 @@ bool SkeletonFinder::verifyFrontierExploration(FrontierPtr ftr_ptr) {
         ftr_ptr->next_node_pos = (center + hit_on_pcl) / 2;;
     }
     return true;
-}
-
-
-
-void SkeletonFinder::findFlowBack(NodePtr node) {
-  if (node->seed_frontier == NULL)
-    return;
-
-  int size = loop_candidate_frontiers.size();
-  vector<vector<Eigen::Vector3d>> flow_back_frontier_log(size);
-  vector<FrontierPtr> frontiers(size);
-  vector<int> pending_frontier_index;
-
-  // Count number of contact black vertices on each frontiers
-  for (VertexPtr v : node->black_vertices) {
-
-    // only process vertices collide with other polyhedrons
-    if (v->collision_node_index < 0)
-      continue;
-
-    // hit_on_pcl is on seed_frontier which is already connected
-    if (checkPtOnFrontier(node->seed_frontier, v->coord))
-      continue;
-
-    FrontierPtr loop_ftr = findFlowBackFrontier(v->coord, v->collision_node_index);
-
-    // cannot find loop frontier
-    if (loop_ftr == NULL)
-      continue;
-
-    flow_back_frontier_log.at(loop_ftr->index).push_back(v->coord);
-    frontiers.at(loop_ftr->index) = loop_ftr;
-  }
-
-  // Sort decreasingly: flowback frontiers with more hits first
-  for (int i = 0; i < size; i++) {
-    if (flow_back_frontier_log.at(i).empty())
-      continue;
-
-    int n_vertices = (int) flow_back_frontier_log.at(i).size();
-    int radius_vertices = getVerticesRadius(flow_back_frontier_log.at(i));
-    if (n_vertices < _min_flowback_creation_threshold 
-        && radius_vertices < _min_flowback_creation_radius_threshold) 
-        continue
-
-    if (pending_frontier_index.empty())
-      pending_frontier_index.push_back(i);
-    else {
-      vector<int>::iterator it;
-      for (it = pending_frontier_index.begin();
-           it != pending_frontier_index.end(); it++) {
-        if (flow_back_frontier_log.at(*it).size() <
-            flow_back_frontier_log.at(i).size()) {
-          pending_frontier_index.insert(it, i);
-          break;
-        }
-        pending_frontier_index.push_back(i);
-        break;
-      }
-    }
-  }
-
-  // Start flowback
-  int size_pending_frontier = pending_frontier_index.size();
-  vector<Eigen::Vector3d> connected_node_pos;
-  if (node->seed_frontier->gate_node->connected_Node_ptr.empty()) {
-    connected_node_pos.push_back(node->seed_frontier->master_node->coord);
-  } else {
-    for (NodePtr gate_con_node : node->seed_frontier->gate_node->connected_Node_ptr) {
-      connected_node_pos.push_back(gate_con_node->coord);
-    }
-  }
-
-  for (int i = 0; i < size_pending_frontier; i++) {
-    int ind = pending_frontier_index.at(i);
-    FrontierPtr flowback_frontier = frontiers.at(ind);
-
-    // Unsafe loop: loop seg is not obstacle-free
-    Eigen::Vector3d end_pt_on_frontier;
-    if (flowback_frontier->gate_node == NULL)
-      end_pt_on_frontier = flowback_frontier->proj_center;
-    else
-      end_pt_on_frontier = flowback_frontier->gate_node->coord;
-
-    if (_exploration_mode) {
-      if (!checkPathClear(node->coord, end_pt_on_frontier) ||
-          !checkPathClear(flowback_frontier->master_node->coord, end_pt_on_frontier)) {
-        // ROS_ERROR("Flowback seg not clear!");
-        continue;
-      }
-    } else {
-      if (!checkSegClear(node->coord, end_pt_on_frontier) ||
-          !checkSegClear(flowback_frontier->master_node->coord, end_pt_on_frontier)) {
-        // ROS_ERROR("Flowback seg not clear!");
-        continue;
-      }
-    }
-
-    // Bad loop: loop only contains 4 nodes
-    if (_bad_loop) {
-      bool bad_loop = false;
-      for (Eigen::Vector3d pos : connected_node_pos) {
-        if (flowback_frontier->gate_node == NULL ||
-            flowback_frontier->gate_node->rollbacked) {
-          if (isSamePos(pos, flowback_frontier->master_node->coord)) {
-            bad_loop = true;
-          }
-        } else {
-          for (NodePtr frontier_con_node :
-               flowback_frontier->gate_node->connected_Node_ptr) {
-            if (isSamePos(pos, frontier_con_node->coord)) {
-              bad_loop = true;
-              break;
-            }
-          }
-        }
-        if (bad_loop)
-          break;
-      }
-      if (bad_loop) {
-        continue;
-      }
-    }
-
-    // Create flowback: new gate node if necessary
-    if (flowback_frontier->gate_node == NULL) {
-      NodePtr new_gate =
-          new Node(flowback_frontier->proj_center, flowback_frontier, true);
-      if (initNode(new_gate)) {
-        flowback_frontier->gate_node = new_gate;
-        flowback_frontier->master_node->connected_Node_ptr.push_back(new_gate);
-        new_gate->connected_Node_ptr.push_back(flowback_frontier->master_node);
-        node->connected_Node_ptr.push_back(new_gate);
-        new_gate->connected_Node_ptr.push_back(node);
-      } else
-        continue;
-    } else if (flowback_frontier->gate_node->rollbacked) {
-      flowback_frontier->gate_node->rollbacked = false;
-      recordNode(flowback_frontier->gate_node);
-      flowback_frontier->master_node->connected_Node_ptr.push_back(
-          flowback_frontier->gate_node);
-      flowback_frontier->gate_node->connected_Node_ptr.push_back(
-          flowback_frontier->master_node);
-      node->connected_Node_ptr.push_back(flowback_frontier->gate_node);
-      flowback_frontier->gate_node->connected_Node_ptr.push_back(node);
-    } else {
-      node->connected_Node_ptr.push_back(flowback_frontier->gate_node);
-      flowback_frontier->gate_node->connected_Node_ptr.push_back(node);
-    }
-
-    for (NodePtr frontier_con_node :
-         flowback_frontier->gate_node->connected_Node_ptr) {
-      connected_node_pos.push_back(frontier_con_node->coord);
-    }
-  }
 }

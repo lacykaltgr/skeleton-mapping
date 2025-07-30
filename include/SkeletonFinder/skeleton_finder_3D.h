@@ -137,7 +137,7 @@ class SkeletonFinder {
     double max_expansion_ray_length, double max_height_diff, int sampling_density,
     int max_facets_grouped, double resolution, bool bad_loop,
     double base_height, double base_radius, double connection_radius, double too_close_threshold,
-    int robot_type, double raywalking_max_height_diff, bool exploration_mode
+    int robot_type, double raywalking_max_height_diff, double min_hit_ratio, bool exploration_mode
   );
   void setStartPt(Eigen::Vector3d startPt);
 
@@ -212,12 +212,18 @@ class SkeletonFinder {
   void addInitialFrontier(FrontierPtr frontier);
   bool canBeReplacedBy(NodePtr node_to_keep, NodePtr node_to_remove);
   bool checkPathClear(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
+  bool checkPathClearAndValid(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
   double checkPathClearLength(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
+  pair<double, double> checkPathClearAndValidLength(Eigen::Vector3d pos1, Eigen::Vector3d pos2);
   double rayFlyingLen(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius);
   double rayWalkingLen(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double max_step_height);
   bool canRayFly(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius);
+  bool canRayFlyValid(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double min_hit_ratio);
+  double rayFlyingValidLen(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double min_hit_ratio);
+  double rayFlyingValidLenInverse(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double min_hit_ratio);
   bool canRayWalk(Eigen::Vector3d pos1, Eigen::Vector3d pos2, double base_radius, double max_step_height);
   bool isValidPosition(Eigen::Vector3d base_pos);
+  double checkHitRatio(Eigen::Vector3d base_pos, Eigen::Vector3d forward_dir, double cut_off_length);
   int removeTooCloseNodes(double tooCloseThreshold);
   void mergeNodes(NodePtr node1, NodePtr node2, vector<NodePtr>& validNodeList, double node1_w, double node2_w);
   void killOtherNode(NodePtr node_to_keep, NodePtr node_to_remove, vector<NodePtr>& validNodeList);
@@ -226,6 +232,19 @@ class SkeletonFinder {
   vector<NodePtr> pathToNodes(vector<Eigen::Vector3d> path);
   double calculateSafeRadius(NodePtr node, NodePtr connected_node);
   vector<double> pathRadiuses(vector<Eigen::Vector3d> path);
+  
+  bool initSkeleton(Eigen::Vector3d start_pt, Eigen::Vector3d start_dir, const pcl::PointCloud<pcl::PointXYZ>::Ptr map_pcl);
+  void updateSkeleton(const pcl::PointCloud<pcl::PointXYZ>::Ptr update_map_pcl);
+  void initBlackAndWhiteVertices(NodePtr nodePtr);
+  void updateBlackAndWhiteVertices(NodePtr nodePtr);
+  bool checkNodeConfirmed(NodePtr node);
+  // bool initnode(currNodePtr)
+  bool initNode_0(NodePtr curNodePtr);
+  bool updateNode(NodePtr curNodePtr);
+  bool verifyFrontierVariations(FrontierPtr cur_frontier);
+  bool verifyFrontierExploration(FrontierPtr ftr_ptr);
+
+
 
   vector<vector<int>> getDisconnectedComponents(vector<NodePtr> nodes);
   
@@ -262,7 +281,7 @@ class SkeletonFinder {
 
   // inline Eigen::Vector3d genSample();
   inline pair<double, int> radiusSearch(Eigen::Vector3d &pt);
-  inline double radiusSearchOnRawMap(Eigen::Vector3d &pt);
+  double radiusSearchOnRawMap(Eigen::Vector3d &pt);
   bool collisionCheck(Eigen::Vector3d search_pt, double threshold);
 
   FrontierPtr pendingFrontiersPopFront() {
